@@ -4,7 +4,8 @@
 #   bash testy/testy.sh      (albo: make test)
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-K="$PWD/komunikator"
+# KOMUNIKATOR_BIN pozwala sprawdzić inną kompilację tym samym zestawem (np. z sanitizerami: make sprawdz).
+K="${KOMUNIKATOR_BIN:-$PWD/komunikator}"
 [ -x "$K" ] || { echo "najpierw: make"; exit 1; }
 
 TMP="$(mktemp -d)"

@@ -23,6 +23,19 @@ okno-install: okno
 test: komunikator
 	bash testy/testy.sh
 
+# Kontrola jakości: ostrzeżenia jako błędy oraz cały zestaw testów na kompilacji z sanitizerami
+# (AddressSanitizer: błędy pamięci, UndefinedBehaviorSanitizer: zachowania niezdefiniowane).
+SANFLAGS = -O1 -g -std=c++17 -Wall -Wextra -Wpedantic -Werror -fno-omit-frame-pointer \
+           -fsanitize=address,undefined -fno-sanitize-recover=all
+
+build/komunikator-san: $(ZRODLA) $(NAGLOWKI)
+	@mkdir -p build
+	$(CXX) $(SANFLAGS) -o $@ $(ZRODLA)
+
+sprawdz: build/komunikator-san
+	$(CXX) $(CXXFLAGS) -Werror -fsyntax-only $(ZRODLA)
+	KOMUNIKATOR_BIN=$(CURDIR)/build/komunikator-san bash testy/testy.sh
+
 install: komunikator
 	install -Dm755 komunikator $(DESTDIR)$(PREFIX)/bin/komunikator
 
@@ -31,5 +44,6 @@ uninstall:
 
 clean:
 	rm -f komunikator
+	rm -rf build
 
-.PHONY: statyczny okno okno-install test install uninstall clean
+.PHONY: statyczny okno okno-install test sprawdz install uninstall clean
