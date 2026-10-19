@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Komunikator
+Comment=Mów, słuchaj i odtwarzaj gotowe komunikaty
+Exec=@BIN@
+Icon=komunikator-okno
+Terminal=false
+Categories=Utility;Accessibility;AudioVideo;
+Keywords=mowa;głos;mikrofon;komunikat;
+StartupWMClass=komunikator-okno

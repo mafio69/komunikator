@@ -1,0 +1,31 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+<qresource prefix="/">
+    <file alias="styl.qss">styl.qss</file>
+    <file alias="palette.json">zasoby/palette.json</file>
+    <file alias="fonty/AtkinsonHyperlegible-Regular.ttf">zasoby/fonty/AtkinsonHyperlegible-Regular.ttf</file>
+    <file alias="fonty/AtkinsonHyperlegible-Bold.ttf">zasoby/fonty/AtkinsonHyperlegible-Bold.ttf</file>
+    <file alias="app/komunikator.svg">zasoby/app/komunikator.svg</file>
+    <file alias="icons/back.svg">zasoby/icons/back.svg</file>
+    <file alias="icons/chevron.svg">zasoby/icons/chevron.svg</file>
+    <file alias="icons/copy.svg">zasoby/icons/copy.svg</file>
+    <file alias="icons/delete.svg">zasoby/icons/delete.svg</file>
+    <file alias="icons/error.svg">zasoby/icons/error.svg</file>
+    <file alias="icons/list.svg">zasoby/icons/list.svg</file>
+    <file alias="icons/mic.svg">zasoby/icons/mic.svg</file>
+    <file alias="icons/next.svg">zasoby/icons/next.svg</file>
+    <file alias="icons/ok.svg">zasoby/icons/ok.svg</file>
+    <file alias="icons/play.svg">zasoby/icons/play.svg</file>
+    <file alias="icons/plus.svg">zasoby/icons/plus.svg</file>
+    <file alias="icons/save.svg">zasoby/icons/save.svg</file>
+    <file alias="icons/say.svg">zasoby/icons/say.svg</file>
+    <file alias="icons/search.svg">zasoby/icons/search.svg</file>
+    <file alias="icons/settings.svg">zasoby/icons/settings.svg</file>
+    <file alias="icons/speaker.svg">zasoby/icons/speaker.svg</file>
+    <file alias="icons/stop.svg">zasoby/icons/stop.svg</file>
+    <file alias="tray/tray-idle-for-dark-panel.svg">zasoby/tray/tray-idle-for-dark-panel.svg</file>
+    <file alias="tray/tray-speaking-for-dark-panel.svg">zasoby/tray/tray-speaking-for-dark-panel.svg</file>
+    <file alias="tray/tray-recording-for-dark-panel.svg">zasoby/tray/tray-recording-for-dark-panel.svg</file>
+    <file alias="tray/tray-error-for-dark-panel.svg">zasoby/tray/tray-error-for-dark-panel.svg</file>
+</qresource>
+</RCC>

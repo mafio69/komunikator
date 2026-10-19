@@ -1,0 +1,129 @@
+/* Arkusz okna komunikatora. @klucz = kolor z palette.json (podstawiany przy wczytaniu motywu).
+   Rozmiary i kolory według design/komunikator-design/komunikator/SPEC.md. */
+
+QWidget { font-family: "Atkinson Hyperlegible"; font-size: 20px; color: @text; background: @bg; }
+QWidget#przezroczysty, QWidget#tresc, QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }
+QLabel { background: transparent; }
+
+/* --- typografia (właściwość "rola") --- */
+QLabel[rola="tytulKreatora"] { font-size: 36px; font-weight: 700; }
+QLabel[rola="tytul"]         { font-size: 30px; font-weight: 700; }
+QLabel[rola="podpisMikrofonu"] { font-size: 28px; font-weight: 700; }
+QLabel[rola="licznik"]       { font-size: 52px; font-weight: 700; color: @red; }
+QLabel[rola="naglowek"]      { font-size: 22px; font-weight: 700; }
+QLabel[rola="etykieta"]      { font-size: 20px; font-weight: 700; }
+QLabel[rola="tresc"]         { font-size: 18px; color: @muted; }
+QLabel[rola="maly"]          { font-size: 16px; color: @muted; }
+QLabel[rola="krok"]          { font-size: 16px; font-weight: 700; color: @muted; }
+QLabel[rola="wylaczony"]     { font-size: 28px; font-weight: 700; color: @disabledText; }
+
+QLabel#klawisz { font-size: 16px; font-weight: 700; color: @muted; border: 2px solid @line; border-radius: 6px; padding: 0 6px; }
+
+/* --- przyciski --- */
+QPushButton, QToolButton {
+    background: @panel; color: @text; border: 2px solid @line; border-radius: 12px;
+    min-height: 56px; padding: 0 18px; font-size: 20px; font-weight: 700;
+}
+QPushButton:hover, QToolButton:hover { background: @raise; }
+QPushButton:pressed, QToolButton:pressed { background: @raise; }
+QPushButton:focus, QToolButton:focus { border: 3px solid @focus; padding: 0 17px; }
+QPushButton:disabled, QToolButton:disabled { background: @disabledBg; color: @disabledText; border-color: @disabledBg; }
+QPushButton[duzy="true"] { min-height: 60px; }
+
+/* zakładki: ikona nad podpisem */
+QToolButton#zakladka { min-height: 76px; border-radius: 14px; font-size: 19px; padding: 6px 8px; }
+QToolButton#zakladka:focus { padding: 5px 7px; }
+QToolButton#zakladka[kolor="blue"]:checked   { background: @blue;   color: @onBlue;   border-color: @blue; }
+QToolButton#zakladka[kolor="amber"]:checked  { background: @amber;  color: @onAmber;  border-color: @amber; }
+QToolButton#zakladka[kolor="violet"]:checked { background: @violet; color: @onViolet; border-color: @violet; }
+QToolButton#zakladka:checked:focus { border-color: @focus; }
+
+/* Powiedz / Zatrzymaj - przycisk główny */
+QPushButton#powiedz { background: @blue; color: @onBlue; border-color: @blue; border-radius: 16px; min-height: 80px; }
+QPushButton#powiedz:focus { border-color: @focus; }
+QPushButton#powiedz QLabel { color: @onBlue; font-size: 30px; font-weight: 700; }
+QPushButton#powiedz QLabel#klawisz { color: @onBlue; border-color: @onBlue; font-size: 16px; }
+QPushButton#powiedz[mowi="true"] { background: @red; border-color: @red; }
+QPushButton#powiedz[mowi="true"] QLabel, QPushButton#powiedz[mowi="true"] QLabel#klawisz { color: @onRed; border-color: @onRed; }
+/* uwaga: Qt nie rozumie ":disabled" przodka w selektorze potomka (stosuje regułę zawsze) - stąd brak takich reguł */
+
+/* kolorowe przyciski */
+QPushButton[kolor="blue"]   { background: @blue;   color: @onBlue;   border-color: @blue; }
+QPushButton[kolor="amber"]  { background: @amber;  color: @onAmber;  border-color: @amber; }
+QPushButton[kolor="violet"] { background: @violet; color: @onViolet; border-color: @violet; }
+QPushButton[kolor="red"]    { background: @red;    color: @onRed;    border-color: @red; }
+QPushButton[kolor="blue"]:focus, QPushButton[kolor="amber"]:focus,
+QPushButton[kolor="violet"]:focus, QPushButton[kolor="red"]:focus { border-color: @focus; }
+QPushButton[kolor="danger"] { color: @danger; border-color: @danger; }
+QPushButton[kolor="danger"]:focus { border-color: @focus; }
+QPushButton[kolor]:disabled { background: @disabledBg; color: @disabledText; border-color: @disabledBg; }
+
+/* segmenty długości nagrania */
+QPushButton#segment:checked { background: @amber; color: @onAmber; border-color: @amber; }
+QPushButton#segment:checked:focus { border-color: @focus; }
+
+/* przycisk urządzeń w pasku stanu */
+QPushButton#urzadzenia { min-height: 40px; font-size: 16px; padding: 0 10px; border-radius: 10px; }
+QPushButton#urzadzenia:focus { padding: 0 9px; }
+QPushButton#urzadzenia QLabel { font-size: 16px; font-weight: 700; }
+QPushButton#urzadzenia QLabel[brak="true"] { color: @danger; }
+
+/* --- pola --- */
+QPlainTextEdit, QLineEdit, QComboBox {
+    background: @field; color: @text; border: 2px solid @line; border-radius: 12px; padding: 12px 16px;
+    selection-background-color: @blue; selection-color: @onBlue;
+}
+QPlainTextEdit:focus, QLineEdit:focus, QComboBox:focus { border: 3px solid @blue; padding: 11px 15px; }
+QPlainTextEdit#poleMowy { font-size: 24px; }
+QPlainTextEdit[readOnly="true"] { background: @field; }
+QLineEdit { min-height: 28px; }
+QLineEdit#szukaj { padding-left: 52px; }
+QLineEdit#szukaj:focus { padding-left: 51px; }
+QComboBox { min-height: 28px; font-weight: 700; }
+QComboBox::drop-down { border: none; width: 40px; }
+QComboBox::down-arrow { image: none; width: 0; }
+QComboBox QAbstractItemView { background: @panel; color: @text; border: 2px solid @line; selection-background-color: @blue; selection-color: @onBlue; outline: none; }
+QComboBox QAbstractItemView::item { min-height: 44px; padding: 0 12px; }
+
+/* --- panele i karty --- */
+QFrame#panel { background: @panel; border: 2px solid @soft; border-radius: 16px; }
+QFrame#panel QLabel, QFrame#karta QLabel { background: transparent; }
+QToolButton#naglowekPanelu { background: transparent; border: none; border-radius: 8px; min-height: 40px; padding: 0 4px; font-size: 22px; font-weight: 700; text-align: left; }
+QToolButton#naglowekPanelu:focus { border: 3px solid @focus; padding: 0 1px; }
+QFrame#karta { background: @panel; border: 2px solid @soft; border-radius: 16px; }
+QFrame#panelPracy { background: @panel; border: 2px solid @soft; border-radius: 16px; }
+
+/* --- banery --- */
+QFrame#baner { border-radius: 14px; border: 2px solid @infoLine; background: @infoBg; }
+QFrame#baner QLabel { background: transparent; }
+QFrame#baner QLabel#banerTytul { font-size: 22px; font-weight: 700; }
+QFrame#baner QLabel#banerOpis { font-size: 18px; }
+QFrame#baner[rodzaj="info"] QLabel { color: @infoText; }
+QFrame#baner[rodzaj="ostrzezenie"] { background: @warnBg; border-color: @warnLine; }
+QFrame#baner[rodzaj="ostrzezenie"] QLabel { color: @warnText; }
+QFrame#baner[rodzaj="blad"] { background: @errBg; border-color: @errLine; }
+QFrame#baner[rodzaj="blad"] QLabel { color: @errText; }
+
+/* --- pasek stanu --- */
+QFrame#pasekStanu { background: @panel; border: none; border-top: 2px solid @soft; min-height: 56px; max-height: 56px; }
+QFrame#pasekStanu QLabel { background: transparent; font-size: 16px; font-weight: 700; }
+QFrame#pasekStanu[blad="true"] { background: @errBg; border-top: 2px solid @danger; }
+QFrame#pasekStanu[blad="true"] QLabel#stanOpis { color: @errText; }
+
+/* --- kreator: postęp kroków --- */
+QFrame#krokPasek { background: @meterOff; border-radius: 3px; min-height: 6px; max-height: 6px; }
+QFrame#krokPasek[aktywny="true"] { background: @blue; }
+
+/* --- przewijanie --- */
+QScrollBar:vertical { background: transparent; width: 14px; margin: 2px; }
+QScrollBar::handle:vertical { background: @line; border-radius: 5px; min-height: 40px; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+/* --- okna dialogowe --- */
+QMessageBox, QInputDialog { background: @bg; }
+QMessageBox QLabel, QInputDialog QLabel { font-size: 20px; }
+QMenu { background: @panel; color: @text; border: 2px solid @line; padding: 4px; }
+QMenu::item { padding: 10px 20px; }
+QMenu::item:selected { background: @blue; color: @onBlue; }
+QToolTip { background: @panel; color: @text; border: 2px solid @line; font-size: 16px; }

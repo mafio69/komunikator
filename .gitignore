@@ -1,0 +1,8 @@
+# Pliki wynikowe budowania (zakotwiczone - nazwa "komunikator" występuje też w ścieżkach źródeł)
+/komunikator
+/okno/komunikator-okno
+*.o
+build/
+
+# Archiwum projektu graficznego - ta sama zawartość jest rozpakowana w design/komunikator-design/
+/design/*.zip
