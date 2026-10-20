@@ -20,7 +20,21 @@ okno:
 okno-install: okno
 	$(MAKE) -C okno install
 
-test: komunikator
+# Testy jednostkowe w C++: rdzeń (JSON, WAV, Wyoming) bez main.cpp silnika.
+RDZEN      = src/wyoming.cpp src/json.cpp src/wav.cpp
+TESTY_J    = $(wildcard testy/jednostkowe/*.cpp)
+TESTY_J_H  = $(wildcard testy/jednostkowe/*.hpp)
+
+build/testy-jednostkowe: $(TESTY_J) $(TESTY_J_H) $(RDZEN) $(NAGLOWKI)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -Isrc -pthread -o $@ $(TESTY_J) $(RDZEN)
+
+build/testy-jednostkowe-san: $(TESTY_J) $(TESTY_J_H) $(RDZEN) $(NAGLOWKI)
+	@mkdir -p build
+	$(CXX) $(SANFLAGS) -Isrc -pthread -o $@ $(TESTY_J) $(RDZEN)
+
+test: komunikator build/testy-jednostkowe
+	./build/testy-jednostkowe
 	bash testy/testy.sh
 
 # Kontrola jakości: ostrzeżenia jako błędy oraz cały zestaw testów na kompilacji z sanitizerami
@@ -32,8 +46,9 @@ build/komunikator-san: $(ZRODLA) $(NAGLOWKI)
 	@mkdir -p build
 	$(CXX) $(SANFLAGS) -o $@ $(ZRODLA)
 
-sprawdz: build/komunikator-san
+sprawdz: build/komunikator-san build/testy-jednostkowe-san
 	$(CXX) $(CXXFLAGS) -Werror -fsyntax-only $(ZRODLA)
+	./build/testy-jednostkowe-san
 	KOMUNIKATOR_BIN=$(CURDIR)/build/komunikator-san bash testy/testy.sh
 
 install: komunikator

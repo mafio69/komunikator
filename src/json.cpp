@@ -1,7 +1,7 @@
 #include "json.hpp"
 
+#include <charconv>
 #include <cstdint>
-#include <cstdlib>
 #include <stdexcept>
 
 namespace json {
@@ -18,7 +18,10 @@ std::string Value::tekst(const std::string& domyslny) const {
 }
 
 long long Value::calk(long long domyslna) const {
-    return typ == Typ::Liczba ? static_cast<long long>(n) : domyslna;
+    // Poza zakresem long long rzutowanie z double jest zachowaniem niezdefiniowanym - wtedy wartość domyślna.
+    constexpr double granica = 9223372036854775808.0;  // 2^63
+    if (typ != Typ::Liczba || !(n > -granica && n < granica)) return domyslna;
+    return static_cast<long long>(n);
 }
 
 namespace {
@@ -136,6 +139,7 @@ struct Parser {
             if (i >= s.size()) blad("niezamknięty tekst");
             char c = s[i++];
             if (c == '"') return w;
+            if (static_cast<unsigned char>(c) < 0x20) blad("znak sterujący w tekście (dozwolony tylko jako \\n, \\t itd.)");
             if (c != '\\') { w += c; continue; }
             if (i >= s.size()) blad("ucięta sekwencja");
             char e = s[i++];
@@ -171,15 +175,30 @@ struct Parser {
         }
     }
 
+    bool cyfra() const { return i < s.size() && s[i] >= '0' && s[i] <= '9'; }
+
+    void cyfry(const char* gdy_brak) {
+        if (!cyfra()) blad(gdy_brak);
+        while (cyfra()) ++i;
+    }
+
+    // Ścisła gramatyka liczby z RFC 8259: -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
     Value liczba() {
         size_t start = i;
         if (s[i] == '-') ++i;
-        while (i < s.size() && ((s[i] >= '0' && s[i] <= '9') || s[i] == '.' || s[i] == 'e' || s[i] == 'E' ||
-                                s[i] == '+' || s[i] == '-'))
+        if (i < s.size() && s[i] == '0') ++i;  // zero wiodące tylko samodzielne: "01" kończy się na "0"
+        else cyfry("niepełna liczba");
+        if (i < s.size() && s[i] == '.') { ++i; cyfry("brak cyfr po kropce"); }
+        if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
             ++i;
+            if (i < s.size() && (s[i] == '+' || s[i] == '-')) ++i;
+            cyfry("brak cyfr wykładnika");
+        }
         Value v;
         v.typ = Value::Typ::Liczba;
-        v.n = std::strtod(s.substr(start, i - start).c_str(), nullptr);
+        // from_chars nie zależy od locale (strtod w polskim locale przeczytałby "1.5" jako 1)
+        auto [koniec, kod] = std::from_chars(s.data() + start, s.data() + i, v.n);
+        if (kod != std::errc() || koniec != s.data() + i) blad("liczba poza zakresem");
         return v;
     }
 };
