@@ -45,7 +45,8 @@ QString Silnik::bladZ(QProcess* p) {
     if (p->error() == QProcess::FailedToStart)
         return "Nie znalazłem programu komunikator. Zainstaluj go: make install.";
     QStringList linie = QString::fromUtf8(p->readAllStandardError()).split('\n', Qt::SkipEmptyParts);
-    QString l = linie.isEmpty() ? QString("Coś poszło nie tak (kod %1).").arg(p->exitCode()) : linie.last().trimmed();
+    // Bez numerów kodów i tekstów technicznych - silnik zapisuje szczegóły w swoim dzienniku.
+    QString l = linie.isEmpty() ? QString("Coś poszło nie tak. Spróbuj jeszcze raz.") : linie.last().trimmed();
     l.remove(QRegularExpression("^komunikator:\\s*"));
     if (!l.isEmpty()) l[0] = l[0].toUpper();
     return l;

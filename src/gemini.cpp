@@ -7,6 +7,7 @@
 #include <fstream>
 #include <stdexcept>
 
+#include "bledy.hpp"
 #include "json.hpp"
 #include "proces.hpp"
 
@@ -46,16 +47,22 @@ struct PlikTymczasowy {
         std::ofstream f(sciezka, std::ios::binary | std::ios::trunc);
         umask(stara);
         f << tresc;
-        if (!f) throw std::runtime_error("nie mogę zapisać pliku tymczasowego w " + katalog);
+        if (!f)
+            throw Blad(Rodzaj::System, "Nie mogę zapisać pliku tymczasowego.", "plik tymczasowy w " + katalog);
     }
     ~PlikTymczasowy() { std::remove(sciezka.c_str()); }
 };
+
+// Wszystkie kłopoty z Gemini wyglądają dla człowieka tak samo - i tak wołający przechodzi na whispera.
+[[noreturn]] void niedostepne(const std::string& szczegoly) {
+    throw Blad(Rodzaj::Chmura, "Rozpoznawanie przez Gemini jest teraz niedostępne.", "Gemini: " + szczegoly);
+}
 
 }  // namespace
 
 std::string rozpoznaj(const Audio& audio, const std::string& klucz, const std::string& model,
                       const std::string& jezyk, const std::string& katalog_tymczasowy) {
-    if (klucz.empty()) throw std::runtime_error("brak klucza Gemini");
+    if (klucz.empty()) niedostepne("brak klucza (komunikator klucz gemini)");
 
     std::string polecenie =
         "Przepisz dokładnie słowa wypowiedziane w tym nagraniu" +
@@ -76,20 +83,19 @@ std::string rozpoznaj(const Audio& audio, const std::string& klucz, const std::s
                                         "Content-Type: application/json", "--data-binary", "@" + tresc.sciezka,
                                         adres},
                                        ok);
-    if (odp.empty()) throw std::runtime_error(ok ? "Gemini nie odpowiedziało" : "brak połączenia z Gemini (internet? curl?)");
+    if (odp.empty()) niedostepne(ok ? "pusta odpowiedź" : "curl bez odpowiedzi (brak internetu albo programu curl)");
 
     json::Value v;
     try {
         v = json::parsuj(odp);
-    } catch (const std::exception&) {
-        throw std::runtime_error("niezrozumiała odpowiedź Gemini");
+    } catch (const std::exception& e) {
+        niedostepne(std::string("niezrozumiała odpowiedź: ") + e.what());
     }
-    if (v["error"].jest_obiektem())
-        throw std::runtime_error("Gemini zgłosiło błąd: " + v["error"]["message"].tekst("bez opisu"));
+    if (v["error"].jest_obiektem()) niedostepne("błąd usługi: " + v["error"]["message"].tekst("bez opisu"));
     const json::Value& czesci = v["candidates"].tab.empty() ? json::Value() : v["candidates"].tab[0]["content"]["parts"];
     std::string tekst;
     for (const auto& c : czesci.tab) tekst += c["text"].tekst();
-    if (!czesci.jest_tablica()) throw std::runtime_error("Gemini nie zwróciło tekstu");
+    if (!czesci.jest_tablica()) niedostepne("odpowiedź bez tekstu");
     return tekst;
 }
 

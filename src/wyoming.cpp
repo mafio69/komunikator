@@ -17,10 +17,11 @@ constexpr size_t MAKS_BLOK = 64u << 20;       // data / payload jednego zdarzeni
 constexpr size_t MAKS_DZWIEK = 512u << 20;    // całe nagranie z syntezy
 }  // namespace
 
-Polaczenie::Polaczenie(const std::string& adres, int limit_sekund) : adres_(adres) {
+Polaczenie::Polaczenie(const std::string& adres, int limit_sekund, const std::string& usluga)
+    : adres_(adres), usluga_(usluga) {
     auto dw = adres.rfind(':');
-    if (dw == std::string::npos || dw + 1 >= adres.size())
-        throw std::runtime_error("zły adres usługi \"" + adres + "\" (oczekiwano host:port)");
+    if (dw == std::string::npos || dw == 0 || dw + 1 >= adres.size())
+        blad(Rodzaj::ZlyAdres, "adres bez postaci host:port: \"" + adres + "\"");
     std::string host = adres.substr(0, dw), port = adres.substr(dw + 1);
     if (host.size() >= 2 && host.front() == '[' && host.back() == ']') host = host.substr(1, host.size() - 2);
 
@@ -29,7 +30,7 @@ Polaczenie::Polaczenie(const std::string& adres, int limit_sekund) : adres_(adre
     wskazowki.ai_socktype = SOCK_STREAM;
     addrinfo* wyniki = nullptr;
     int r = getaddrinfo(host.c_str(), port.c_str(), &wskazowki, &wyniki);
-    if (r != 0) throw std::runtime_error("nie znam adresu " + adres + ": " + gai_strerror(r));
+    if (r != 0) blad(Rodzaj::UslugaNiedostepna, std::string("getaddrinfo: ") + gai_strerror(r));
 
     int ostatni_blad = 0;
     for (addrinfo* a = wyniki; a; a = a->ai_next) {
@@ -43,7 +44,11 @@ Polaczenie::Polaczenie(const std::string& adres, int limit_sekund) : adres_(adre
         close(f);
     }
     freeaddrinfo(wyniki);
-    if (fd_ < 0) throw std::runtime_error("brak połączenia z " + adres + ": " + std::strerror(ostatni_blad));
+    if (fd_ < 0) blad(Rodzaj::UslugaNiedostepna, std::string("connect: ") + std::strerror(ostatni_blad));
+}
+
+void Polaczenie::blad(Rodzaj rodzaj, const std::string& szczegoly) const {
+    throw Blad(rodzaj, komunikat_uslugi(rodzaj, usluga_, adres_), usluga_ + " " + adres_ + ": " + szczegoly);
 }
 
 Polaczenie::~Polaczenie() {
@@ -56,7 +61,7 @@ void Polaczenie::wyslij_bajty(const std::string& b) {
         ssize_t n = send(fd_, b.data() + wyslane, b.size() - wyslane, MSG_NOSIGNAL);
         if (n < 0) {
             if (errno == EINTR) continue;
-            throw std::runtime_error("wysyłanie do " + adres_ + ": " + std::strerror(errno));
+            blad(Rodzaj::UslugaPrzerwala, std::string("send: ") + std::strerror(errno));
         }
         wyslane += static_cast<size_t>(n);
     }
@@ -75,11 +80,10 @@ void Polaczenie::dociagnij() {
         char kawalek[65536];
         ssize_t n = recv(fd_, kawalek, sizeof kawalek, 0);
         if (n > 0) { bufor_.append(kawalek, static_cast<size_t>(n)); return; }
-        if (n == 0) throw std::runtime_error("usługa " + adres_ + " zamknęła połączenie");
+        if (n == 0) blad(Rodzaj::UslugaPrzerwala, "serwer zamknął połączenie");
         if (errno == EINTR) continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            throw std::runtime_error("usługa " + adres_ + " nie odpowiada (przekroczony czas)");
-        throw std::runtime_error("odbiór z " + adres_ + ": " + std::strerror(errno));
+        if (errno == EAGAIN || errno == EWOULDBLOCK) blad(Rodzaj::UslugaNieOdpowiada, "recv: przekroczony czas");
+        blad(Rodzaj::UslugaPrzerwala, std::string("recv: ") + std::strerror(errno));
     }
 }
 
@@ -98,17 +102,22 @@ std::string Polaczenie::czytaj_linie() {
             bufor_.erase(0, nl + 1);
             return linia;
         }
-        if (bufor_.size() > MAKS_LINIA) throw std::runtime_error("za długi nagłówek od " + adres_);
+        if (bufor_.size() > MAKS_LINIA) blad(Rodzaj::UslugaPrzerwala, "nagłówek zdarzenia dłuższy niż limit");
         dociagnij();
     }
 }
 
 Zdarzenie Polaczenie::odbierz() {
     std::string linia = czytaj_linie();
-    json::Value naglowek = json::parsuj(linia);
+    json::Value naglowek;
+    try {
+        naglowek = json::parsuj(linia);
+    } catch (const std::runtime_error& e) {
+        blad(Rodzaj::UslugaPrzerwala, std::string("nagłówek zdarzenia: ") + e.what());
+    }
     Zdarzenie z;
     z.typ = naglowek["type"].tekst();
-    if (z.typ.empty()) throw std::runtime_error("zdarzenie bez typu od " + adres_);
+    if (z.typ.empty()) blad(Rodzaj::UslugaPrzerwala, "zdarzenie bez typu");
     z.dane = naglowek["data"];
     if (!z.dane.jest_obiektem()) z.dane = json::parsuj("{}");
 
@@ -116,17 +125,34 @@ Zdarzenie Polaczenie::odbierz() {
     long long dl_ladunku = naglowek["payload_length"].calk(0);
     if (dl_danych < 0 || dl_ladunku < 0 || static_cast<size_t>(dl_danych) > MAKS_BLOK ||
         static_cast<size_t>(dl_ladunku) > MAKS_BLOK)
-        throw std::runtime_error("podejrzana długość danych od " + adres_);
+        blad(Rodzaj::UslugaPrzerwala, "podejrzana długość danych zdarzenia");
     if (dl_danych > 0) {
-        json::Value dodatkowe = json::parsuj(czytaj_dokladnie(static_cast<size_t>(dl_danych)));
+        json::Value dodatkowe;
+        try {
+            dodatkowe = json::parsuj(czytaj_dokladnie(static_cast<size_t>(dl_danych)));
+        } catch (const Blad&) {
+            throw;
+        } catch (const std::runtime_error& e) {
+            blad(Rodzaj::UslugaPrzerwala, std::string("dane zdarzenia: ") + e.what());
+        }
         for (auto& [k, v] : dodatkowe.obj) z.dane.obj[k] = v;
     }
     if (dl_ladunku > 0) z.payload = czytaj_dokladnie(static_cast<size_t>(dl_ladunku));
     return z;
 }
 
+namespace {
+const char* const USLUGA_MOWY = "usługa mowy";
+const char* const USLUGA_ROZPOZNAWANIA = "usługa rozpoznawania mowy";
+
+// Parametry dźwięku od serwera muszą mieć sens - inaczej dalsze liczenie (WAV, długość) daje bzdury.
+bool rozsadny_format(const Audio& a) {
+    return a.rate >= 1000 && a.rate <= 384000 && (a.width >= 1 && a.width <= 4) && a.channels >= 1 && a.channels <= 8;
+}
+}  // namespace
+
 Audio syntezuj(const std::string& adres, const std::string& tekst, const std::string& glos) {
-    Polaczenie p(adres, 60);
+    Polaczenie p(adres, 60, USLUGA_MOWY);
     std::string dane = "{\"text\":" + json::cytuj(tekst);
     if (!glos.empty()) dane += ",\"voice\":{\"name\":" + json::cytuj(glos) + "}";
     dane += "}";
@@ -142,19 +168,28 @@ Audio syntezuj(const std::string& adres, const std::string& tekst, const std::st
         }
         if (z.typ == "audio-chunk") {
             a.pcm += z.payload;
-            if (a.pcm.size() > MAKS_DZWIEK) throw std::runtime_error("synteza zwróciła podejrzanie dużo dźwięku");
+            if (a.pcm.size() > MAKS_DZWIEK)
+                throw Blad(Rodzaj::UslugaPrzerwala, komunikat_uslugi(Rodzaj::UslugaPrzerwala, USLUGA_MOWY, adres),
+                           "synteza: więcej dźwięku niż limit");
         } else if (z.typ == "audio-stop") {
             break;
         } else if (z.typ == "error") {
-            throw std::runtime_error("usługa mowy zgłosiła błąd: " + z.dane["text"].tekst("(bez opisu)"));
+            throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, USLUGA_MOWY, adres),
+                       "synteza: serwer zgłosił błąd: " + z.dane["text"].tekst("(bez opisu)"));
         }
     }
-    if (a.pcm.empty()) throw std::runtime_error("usługa mowy nie zwróciła dźwięku");
+    if (a.pcm.empty())
+        throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, USLUGA_MOWY, adres),
+                   "synteza: brak dźwięku w odpowiedzi");
+    if (!rozsadny_format(a))
+        throw Blad(Rodzaj::UslugaPrzerwala, komunikat_uslugi(Rodzaj::UslugaPrzerwala, USLUGA_MOWY, adres),
+                   "synteza: niemożliwy format dźwięku rate=" + std::to_string(a.rate) + " width=" +
+                       std::to_string(a.width) + " channels=" + std::to_string(a.channels));
     return a;
 }
 
 std::string rozpoznaj(const std::string& adres, const Audio& audio, const std::string& jezyk) {
-    Polaczenie p(adres, 300);  // rozpoznawanie długiego nagrania na CPU potrafi trwać
+    Polaczenie p(adres, 300, USLUGA_ROZPOZNAWANIA);  // rozpoznawanie długiego nagrania na CPU potrafi trwać
     std::string format = "\"rate\":" + std::to_string(audio.rate) + ",\"width\":" + std::to_string(audio.width) +
                          ",\"channels\":" + std::to_string(audio.channels);
     p.wyslij("transcribe", jezyk.empty() ? "{}" : "{\"language\":" + json::cytuj(jezyk) + "}");
@@ -168,13 +203,14 @@ std::string rozpoznaj(const std::string& adres, const Audio& audio, const std::s
         Zdarzenie z = p.odbierz();
         if (z.typ == "transcript") return z.dane["text"].tekst();
         if (z.typ == "error")
-            throw std::runtime_error("usługa rozpoznawania zgłosiła błąd: " + z.dane["text"].tekst("(bez opisu)"));
+            throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, USLUGA_ROZPOZNAWANIA, adres),
+                       "rozpoznawanie: serwer zgłosił błąd: " + z.dane["text"].tekst("(bez opisu)"));
         // transcript-start / transcript-chunk itp. (tryb strumieniowy) - czekamy na pełny wynik
     }
 }
 
-json::Value opisz(const std::string& adres) {
-    Polaczenie p(adres, 10);
+json::Value opisz(const std::string& adres, const std::string& usluga) {
+    Polaczenie p(adres, 10, usluga);
     p.wyslij("describe");
     for (;;) {
         Zdarzenie z = p.odbierz();

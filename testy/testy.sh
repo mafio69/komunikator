@@ -31,6 +31,10 @@ echo "to nie dźwięk" > "$TMP/zly.wav"
 kod 1 rozpoznaj "$TMP/zly.wav"        && ok "zły WAV -> kod 1"              || zle "zły WAV"
 KOMUNIKATOR_TTS=127.0.0.1:1 "$K" powiedz test >/dev/null 2>&1; [ $? -eq 1 ] \
                                       && ok "usługa nieosiągalna -> kod 1"  || zle "usługa nieosiągalna"
+# Zasada projektu: człowiek widzi zdanie z podpowiedzią, nigdy surowy błąd systemu.
+KOMUNIKATOR_TTS=127.0.0.1:1 "$K" powiedz test 2>"$TMP/komunikat" >/dev/null
+grep -q "Nie mogę połączyć się z: usługa mowy" "$TMP/komunikat" && ! grep -qiE "refused|connect:|errno" "$TMP/komunikat" \
+                                      && ok "brak usługi -> przyjazny komunikat" || zle "brak usługi -> techniczny komunikat: $(cat "$TMP/komunikat")"
 [ "$("$K" lista 2>/dev/null)" = "" ]  && ok "pusta lista"                   || zle "pusta lista"
 kod 2 sluchaj 1 </dev/null            && ok "bez wybranego mikrofonu -> kod 2" || zle "mikrofon wybrany sam z siebie"
 KOMUNIKATOR_ODTWARZACZ="aplay -q" "$K" powiedz test </dev/null >/dev/null 2>&1; [ $? -eq 2 ] \

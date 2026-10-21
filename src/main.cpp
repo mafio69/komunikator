@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "bledy.hpp"
 #include "gemini.hpp"
 #include "json.hpp"
 #include "proces.hpp"
@@ -662,8 +663,12 @@ std::string rozpoznaj_mowe(const Ustawienia& u, const Audio& a) {
             std::string tmp = run && *run ? run : u.dane.string();
             fs::create_directories(tmp);
             return gemini::rozpoznaj(a, klucz_gemini(u), u.gemini_model, u.jezyk, tmp);
+        } catch (const Blad& e) {
+            zapisz_w_dzienniku("Gemini: " + std::string(e.what()) + " | " + e.szczegoly());
+            std::cerr << "uwaga: Gemini niedostępne - rozpoznaję lokalnie (whisper)\n";
         } catch (const std::exception& e) {
-            std::cerr << "uwaga: Gemini niedostępne (" << e.what() << ") - rozpoznaję lokalnie (whisper)\n";
+            zapisz_w_dzienniku(std::string("Gemini: ") + e.what());
+            std::cerr << "uwaga: Gemini niedostępne - rozpoznaję lokalnie (whisper)\n";
         }
     }
     return wyoming::rozpoznaj(u.stt, a, u.jezyk);
@@ -709,26 +714,27 @@ int cmd_rozpoznaj(const Ustawienia& u, const std::vector<std::string>& args) {
 
 int cmd_sprawdz(const Ustawienia& u) {
     int wynik = OK;
-    auto sprawdz = [&](const char* co, const std::string& adres, const char* klucz) {
+    auto sprawdz = [&](const char* co, const std::string& adres, const char* klucz, const char* usluga) {
         try {
-            json::Value info = wyoming::opisz(adres);
+            json::Value info = wyoming::opisz(adres, usluga);
             std::string programy;
             for (auto& p : info[klucz].tab)
                 programy += (programy.empty() ? "" : ", ") + p["name"].tekst("?") + " " + p["version"].tekst();
             std::cout << "OK    " << co << " " << adres << "  " << (programy.empty() ? "(bez opisu)" : programy)
                       << "\n";
-        } catch (const std::exception& e) {
+        } catch (const Blad& e) {
+            zapisz_w_dzienniku(e.szczegoly());
             std::cout << "BŁĄD  " << co << " " << adres << "  " << e.what() << "\n";
             wynik = BLAD;
         }
     };
-    sprawdz("mowa (tts)         ", u.tts, "tts");
-    sprawdz("rozpoznawanie (stt)", u.stt, "asr");
+    sprawdz("mowa (tts)         ", u.tts, "tts", "usługa mowy");
+    sprawdz("rozpoznawanie (stt)", u.stt, "asr", "usługa rozpoznawania mowy");
     return wynik;
 }
 
 int cmd_glosy(const Ustawienia& u) {
-    json::Value info = wyoming::opisz(u.tts);
+    json::Value info = wyoming::opisz(u.tts, "usługa mowy");
     for (auto& program : info["tts"].tab)
         for (auto& g : program["voices"].tab) {
             bool zainstalowany = g["installed"].typ != json::Value::Typ::Bool || g["installed"].b;
@@ -856,8 +862,30 @@ int main(int argc, char** argv) {
     } catch (const ZleUzycie& e) {
         std::cerr << "komunikator: " << e.what() << "\n";
         return ZLE_UZYCIE;
-    } catch (const std::exception& e) {
+    } catch (const Blad& e) {
+        // Człowiek dostaje zdanie z podpowiedzią; szczegóły techniczne idą do dziennika
+        // (a na ekran tylko na życzenie: KOMUNIKATOR_SZCZEGOLY=1).
+        zapisz_w_dzienniku(polecenie + ": " + e.what() + " | " + e.szczegoly());
         std::cerr << "komunikator: " << e.what() << "\n";
+        if (const char* s = std::getenv("KOMUNIKATOR_SZCZEGOLY"); s && *s == '1' && !e.szczegoly().empty())
+            std::cerr << "  szczegóły: " << e.szczegoly() << "\n";
+        return BLAD;
+    } catch (const std::exception& e) {
+        // Nieprzewidziany błąd: komunikaty z wnętrza programu bywają techniczne, więc nie pokazujemy ich
+        // wprost, tylko odsyłamy do dziennika. Nasze własne, już ludzkie komunikaty (runtime_error z main.cpp)
+        // też tu trafiają - dlatego sprawdzamy, czy tekst wygląda na techniczny.
+        std::string tekst = e.what();
+        zapisz_w_dzienniku(polecenie + ": " + tekst);
+        bool techniczny = tekst.find("JSON") != std::string::npos || tekst.find("std::") != std::string::npos ||
+                          tekst.find("errno") != std::string::npos || tekst.find("basic_string") != std::string::npos ||
+                          tekst.find("filesystem error") != std::string::npos;
+        if (techniczny) {
+            std::string dz = sciezka_dziennika();
+            std::cerr << "komunikator: Coś poszło nie tak." << (dz.empty() ? "" : " Szczegóły zapisałem w dzienniku: " + dz)
+                      << "\n";
+        } else {
+            std::cerr << "komunikator: " << tekst << "\n";
+        }
         return BLAD;
     }
 }
