@@ -7,6 +7,8 @@
 A small, dependency-free C++17 tool that turns text into speech and speech into text
 over the open [Wyoming](https://github.com/rhasspy/wyoming) protocol, plus a calm Qt desktop window on top.
 
+*Po polsku: [README.pl.md](README.pl.md)*
+
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)
 ![Linux](https://img.shields.io/badge/platform-Linux-333?logo=linux&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/runtime%20dependencies-none-2ea44f)
@@ -84,9 +86,12 @@ komunikator sluchaj 5                             # record 5 s and print what wa
 komunikator rozpoznaj nagranie.wav                # transcribe a file
 ```
 
+Full documentation: **[INSTRUCTIONS.md](INSTRUCTIONS.md)** (every command) and
+**[INSTALL.md](INSTALL.md)** (building, settings, the window, static builds).
+Polish versions: [INSTRUKCJA.md](INSTRUKCJA.md), [INSTALACJA.md](INSTALACJA.md).
+
 > The command names are Polish, because that is the language of the people who use it every day.
-> The full manual is in Polish as well: **[INSTRUKCJA.md](INSTRUKCJA.md)** (every command) and
-> **[INSTALACJA.md](INSTALACJA.md)** (building, settings, the window, static builds).
+> [INSTRUCTIONS.md](INSTRUCTIONS.md) opens with a table that translates every command.
 
 The desktop window is a separate program with its own dependencies (Qt 5):
 

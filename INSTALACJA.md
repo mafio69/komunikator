@@ -1,5 +1,7 @@
 # Instalacja komunikatora
 
+*Wersja angielska: [INSTALL.md](INSTALL.md)*
+
 Komunikator to jeden program. Do zbudowania potrzebny jest tylko kompilator C++ (g++ 9 lub nowszy)
 i `make`. Nie potrzebuje żadnych bibliotek, Home Assistanta, Pythona ani internetu.
 
@@ -43,8 +45,22 @@ Wynik: plik `komunikator` w tym samym katalogu.
 cd ~/komunikator && make test
 ```
 
-Ma się skończyć napisem `wynik: dobrze 29, źle 0`. Testy nic nie mówią na głos.
-Gdy usługi mowy nie działają, część B jest pomijana, a nie liczona jako błąd.
+Oba zestawy mają skończyć się zerem błędów:
+
+```text
+== testy jednostkowe: dobrze 23, źle 0 ==
+...
+== wynik: dobrze 35, źle 0 ==
+```
+
+Testy nic nie mówią na głos. Gdy usługi mowy nie działają, testy, które ich potrzebują,
+są pomijane, a nie liczone jako błąd.
+
+Pełna kontrola jakości (ostrzeżenia jako błędy i wszystkie testy pod sanitizerami ASan i UBSan):
+
+```bash
+cd ~/komunikator && make sprawdz
+```
 
 ## 3. Instalacja (żeby działało z każdego miejsca)
 
@@ -160,4 +176,4 @@ cd ~/komunikator && make uninstall
 ```
 
 Zapisane komunikaty zostają w `~/.local/share/komunikator`. Usuń ten katalog ręcznie,
-jeśli nie są już potrzebne.
+jeśli nie są już potrzebne. Dziennik diagnostyczny leży w `~/.local/state/komunikator/`.

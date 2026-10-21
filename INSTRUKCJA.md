@@ -1,5 +1,7 @@
 # Instrukcja komunikatora
 
+*Wersja angielska: [INSTRUCTIONS.md](INSTRUCTIONS.md)*
+
 Komunikator mówi tekst na głos, nagrywa gotowe komunikaty i zamienia nagraną mowę na tekst.
 Mogą go używać ludzie, skrypty, cron i inne programy, tak samo jak dziś `powiedz` i `sluchaj`.
 
@@ -35,7 +37,8 @@ komunikator usun drzwi
 - Dźwięk powstaje raz, przy `zapisz`. Potem `odtworz` gra go **bez usługi mowy**,
   czyli działa nawet wtedy, gdy kontener z piperem leży.
 - Ponowne `zapisz` z tą samą nazwą nadpisuje komunikat.
-- Nazwa: litery (także polskie), cyfry i znaki `- _ .`. Bez spacji i ukośników.
+- Nazwa: litery (także polskie), cyfry, spacje w środku nazwy i znaki `- _ .`. Nie może zaczynać się
+  kropką ani myślnikiem, zaczynać się ani kończyć spacją, ani zawierać ukośnika.
 - Pliki leżą w `~/.local/share/komunikator/komunikaty/`:
   `NAZWA.txt` (tekst, możesz go edytować) i `NAZWA.wav` (dźwięk).
   Po ręcznej zmianie tekstu w `.txt` usuń `NAZWA.wav`: następne `odtworz` nagra go od nowa.
@@ -116,12 +119,18 @@ zaraz po wysłaniu. Do połączenia służy program `curl`.
 komunikator sprawdz
 ```
 
-- `BŁĄD ... brak połączenia` znaczy, że kontener nie działa. Sprawdź `docker ps` i uruchom go
-  ponownie: `docker restart wyoming-piper` albo `docker restart wyoming-whisper`.
+Każdy błąd to zwykłe zdanie: co się stało i co zrobić. Najczęstsze:
+
+- „Nie mogę połączyć się z: usługa mowy …” znaczy, że kontener nie działa albo adres jest zły.
+  Sprawdź `docker ps`, uruchom go ponownie (`docker restart wyoming-piper` albo
+  `docker restart wyoming-whisper`) i adres w `komunikator ustawienia`.
 - `nagrywanie ... nie powiodło się` znaczy, że mikrofon jest zajęty przez inny program albo odłączony.
   Wybierz inny (`komunikator mikrofony`), najpewniej działa `default`.
 - `nie znalazłem odtwarzacza` znaczy, że nie ma `aplay`. Dźwięk i tak jest w pliku podanym w komunikacie.
 - `komunikator ustawienia` pokazuje, jakich adresów program używa.
+
+Szczegóły techniczne każdego błędu trafiają do `~/.local/state/komunikator/dziennik.log`.
+Żeby zobaczyć je też na ekranie, uruchom polecenie z `KOMUNIKATOR_SZCZEGOLY=1`.
 
 ## Okno
 
@@ -185,6 +194,8 @@ wykorzystuje Home Assistant do łączenia się z piperem i whisperem. Kod jest w
 | `wyoming.cpp` | połączenie i zdarzenia Wyoming: `synthesize`, `transcribe`, `describe` |
 | `json.cpp` | mały czytnik i zapis JSON (bez bibliotek) |
 | `wav.cpp` | zapis i odczyt plików WAV |
+| `bledy.cpp` | przyjazne komunikaty błędów i dziennik |
+| `gemini.cpp` | rozpoznawanie przez Gemini (opcjonalne) |
 
 ## Co dalej (rozszerzenia, osobno od podstawy)
 
