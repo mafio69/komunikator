@@ -37,7 +37,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char* WERSJA = "0.5.0";
+constexpr const char* WERSJA = "1.0.0";
 
 // Kody wyjścia - stałe, żeby inne programy mogły na nich polegać.
 constexpr int OK = 0;
