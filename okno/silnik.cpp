@@ -218,7 +218,8 @@ void Silnik::rozpoznaj(const QString& plik) {
             // silnik pisze "uwaga: ..." na stderr, gdy Gemini zawiodło i rozpoznał lokalnie
             QString uwaga;
             for (const QString& l : QString::fromUtf8(p->readAllStandardError()).split('\n'))
-                if (l.startsWith("uwaga: Gemini")) uwaga = l.mid(7).trimmed();
+                // sygnał od silnika w obu językach: "uwaga: Gemini…" / "warning: Gemini…"
+                if (l.startsWith("uwaga: Gemini") || l.startsWith("warning: Gemini")) uwaga = l.section(':', 1).trimmed();
             emit rozpoznano(true, QString::fromUtf8(p->readAllStandardOutput()).trimmed(), uwaga);
         }
         p->deleteLater();

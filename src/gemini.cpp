@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "bledy.hpp"
+#include "jezyk.hpp"
 #include "json.hpp"
 #include "proces.hpp"
 
@@ -48,14 +49,16 @@ struct PlikTymczasowy {
         umask(stara);
         f << tresc;
         if (!f)
-            throw Blad(Rodzaj::System, "Nie mogę zapisać pliku tymczasowego.", "plik tymczasowy w " + katalog);
+            throw Blad(Rodzaj::System, T("Nie mogę zapisać pliku tymczasowego.", "Cannot write a temporary file."),
+                       "plik tymczasowy w " + katalog);
     }
     ~PlikTymczasowy() { std::remove(sciezka.c_str()); }
 };
 
 // Wszystkie kłopoty z Gemini wyglądają dla człowieka tak samo - i tak wołający przechodzi na whispera.
 [[noreturn]] void niedostepne(const std::string& szczegoly) {
-    throw Blad(Rodzaj::Chmura, "Rozpoznawanie przez Gemini jest teraz niedostępne.", "Gemini: " + szczegoly);
+    throw Blad(Rodzaj::Chmura, T("Rozpoznawanie przez Gemini jest teraz niedostępne.", "Recognition through Gemini is unavailable right now."),
+               "Gemini: " + szczegoly);
 }
 
 }  // namespace

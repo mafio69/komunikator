@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "bledy.hpp"
+#include "jezyk.hpp"
 
 namespace {
 
@@ -18,7 +19,8 @@ void put32(std::string& w, uint32_t v) {
 
 [[noreturn]] void zly(const std::string& szczegoly) {
     throw Blad(Rodzaj::ZlyDzwiek,
-               "To nie jest nagranie, które umiem odczytać. Potrzebny jest plik WAV bez kompresji (PCM).",
+               T("To nie jest nagranie, które umiem odczytać. Potrzebny jest plik WAV bez kompresji (PCM).",
+                 "This is not a recording I can read. An uncompressed WAV file (PCM) is needed."),
                "WAV: " + szczegoly);
 }
 

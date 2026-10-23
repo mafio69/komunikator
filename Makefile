@@ -3,7 +3,7 @@ CXX      ?= g++
 CXXFLAGS ?= -O2 -std=c++17 -Wall -Wextra -Wpedantic
 PREFIX   ?= $(HOME)/.local
 
-ZRODLA   = src/main.cpp src/wyoming.cpp src/json.cpp src/wav.cpp src/gemini.cpp src/proces.cpp src/bledy.cpp
+ZRODLA   = src/main.cpp src/wyoming.cpp src/json.cpp src/wav.cpp src/gemini.cpp src/proces.cpp src/bledy.cpp src/jezyk.cpp
 NAGLOWKI = $(wildcard src/*.hpp)
 
 komunikator: $(ZRODLA) $(NAGLOWKI)
@@ -21,7 +21,7 @@ okno-install: okno
 	$(MAKE) -C okno install
 
 # Testy jednostkowe w C++: rdzeń (JSON, WAV, Wyoming) bez main.cpp silnika.
-RDZEN      = src/wyoming.cpp src/json.cpp src/wav.cpp src/bledy.cpp
+RDZEN      = src/wyoming.cpp src/json.cpp src/wav.cpp src/bledy.cpp src/jezyk.cpp
 TESTY_J    = $(wildcard testy/jednostkowe/*.cpp)
 TESTY_J_H  = $(wildcard testy/jednostkowe/*.hpp)
 

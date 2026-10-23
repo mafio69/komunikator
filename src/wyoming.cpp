@@ -1,5 +1,7 @@
 #include "wyoming.hpp"
 
+#include "jezyk.hpp"
+
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -141,9 +143,10 @@ Zdarzenie Polaczenie::odbierz() {
     return z;
 }
 
+std::string usluga_mowy() { return T("usługa mowy", "speech service"); }
+std::string usluga_rozpoznawania() { return T("usługa rozpoznawania mowy", "speech recognition service"); }
+
 namespace {
-const char* const USLUGA_MOWY = "usługa mowy";
-const char* const USLUGA_ROZPOZNAWANIA = "usługa rozpoznawania mowy";
 
 // Parametry dźwięku od serwera muszą mieć sens - inaczej dalsze liczenie (WAV, długość) daje bzdury.
 bool rozsadny_format(const Audio& a) {
@@ -152,7 +155,7 @@ bool rozsadny_format(const Audio& a) {
 }  // namespace
 
 Audio syntezuj(const std::string& adres, const std::string& tekst, const std::string& glos) {
-    Polaczenie p(adres, 60, USLUGA_MOWY);
+    Polaczenie p(adres, 60, usluga_mowy());
     std::string dane = "{\"text\":" + json::cytuj(tekst);
     if (!glos.empty()) dane += ",\"voice\":{\"name\":" + json::cytuj(glos) + "}";
     dane += "}";
@@ -169,27 +172,27 @@ Audio syntezuj(const std::string& adres, const std::string& tekst, const std::st
         if (z.typ == "audio-chunk") {
             a.pcm += z.payload;
             if (a.pcm.size() > MAKS_DZWIEK)
-                throw Blad(Rodzaj::UslugaPrzerwala, komunikat_uslugi(Rodzaj::UslugaPrzerwala, USLUGA_MOWY, adres),
+                throw Blad(Rodzaj::UslugaPrzerwala, komunikat_uslugi(Rodzaj::UslugaPrzerwala, usluga_mowy(), adres),
                            "synteza: więcej dźwięku niż limit");
         } else if (z.typ == "audio-stop") {
             break;
         } else if (z.typ == "error") {
-            throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, USLUGA_MOWY, adres),
+            throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, usluga_mowy(), adres),
                        "synteza: serwer zgłosił błąd: " + z.dane["text"].tekst("(bez opisu)"));
         }
     }
     if (a.pcm.empty())
-        throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, USLUGA_MOWY, adres),
+        throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, usluga_mowy(), adres),
                    "synteza: brak dźwięku w odpowiedzi");
     if (!rozsadny_format(a))
-        throw Blad(Rodzaj::UslugaPrzerwala, komunikat_uslugi(Rodzaj::UslugaPrzerwala, USLUGA_MOWY, adres),
+        throw Blad(Rodzaj::UslugaPrzerwala, komunikat_uslugi(Rodzaj::UslugaPrzerwala, usluga_mowy(), adres),
                    "synteza: niemożliwy format dźwięku rate=" + std::to_string(a.rate) + " width=" +
                        std::to_string(a.width) + " channels=" + std::to_string(a.channels));
     return a;
 }
 
 std::string rozpoznaj(const std::string& adres, const Audio& audio, const std::string& jezyk) {
-    Polaczenie p(adres, 300, USLUGA_ROZPOZNAWANIA);  // rozpoznawanie długiego nagrania na CPU potrafi trwać
+    Polaczenie p(adres, 300, usluga_rozpoznawania());  // rozpoznawanie długiego nagrania na CPU potrafi trwać
     std::string format = "\"rate\":" + std::to_string(audio.rate) + ",\"width\":" + std::to_string(audio.width) +
                          ",\"channels\":" + std::to_string(audio.channels);
     p.wyslij("transcribe", jezyk.empty() ? "{}" : "{\"language\":" + json::cytuj(jezyk) + "}");
@@ -203,7 +206,7 @@ std::string rozpoznaj(const std::string& adres, const Audio& audio, const std::s
         Zdarzenie z = p.odbierz();
         if (z.typ == "transcript") return z.dane["text"].tekst();
         if (z.typ == "error")
-            throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, USLUGA_ROZPOZNAWANIA, adres),
+            throw Blad(Rodzaj::UslugaOdmowila, komunikat_uslugi(Rodzaj::UslugaOdmowila, usluga_rozpoznawania(), adres),
                        "rozpoznawanie: serwer zgłosił błąd: " + z.dane["text"].tekst("(bez opisu)"));
         // transcript-start / transcript-chunk itp. (tryb strumieniowy) - czekamy na pełny wynik
     }

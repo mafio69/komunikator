@@ -11,6 +11,8 @@ K="${KOMUNIKATOR_BIN:-$PWD/komunikator}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export KOMUNIKATOR_DANE="$TMP/dane" KOMUNIKATOR_ODTWARZACZ="" XDG_CONFIG_HOME="$TMP/konfig"
+# Testy sprawdzają treść komunikatów, więc język jest ustalony, a nie wzięty z maszyny, na której biegną.
+export KOMUNIKATOR_INTERFEJS=pl XDG_STATE_HOME="$TMP/stan"
 DOBRZE=0; ZLE=0
 ok()   { echo "  ✔ $1"; DOBRZE=$((DOBRZE+1)); }
 zle()  { echo "  ✘ $1"; ZLE=$((ZLE+1)); }
@@ -35,6 +37,22 @@ KOMUNIKATOR_TTS=127.0.0.1:1 "$K" powiedz test >/dev/null 2>&1; [ $? -eq 1 ] \
 KOMUNIKATOR_TTS=127.0.0.1:1 "$K" powiedz test 2>"$TMP/komunikat" >/dev/null
 grep -q "Nie mogę połączyć się z: usługa mowy" "$TMP/komunikat" && ! grep -qiE "refused|connect:|errno" "$TMP/komunikat" \
                                       && ok "brak usługi -> przyjazny komunikat" || zle "brak usługi -> techniczny komunikat: $(cat "$TMP/komunikat")"
+
+echo "== A2. po angielsku =="
+KOMUNIKATOR_INTERFEJS=en KOMUNIKATOR_TTS=127.0.0.1:1 "$K" say test 2>"$TMP/komunikat" >/dev/null; [ $? -eq 1 ] \
+  && grep -q "^komunikator: I can't reach the speech service" "$TMP/komunikat" \
+                                      && ok "en: brak usługi -> komunikat po angielsku" || zle "en: $(cat "$TMP/komunikat")"
+# (wynik do zmiennej: przy pipefail kod 2 nieznanego polecenia psułby cały potok z grep)
+W="$(KOMUNIKATOR_INTERFEJS=en "$K" cośtam 2>&1)"; echo "$W" | grep -q 'unknown command "cośtam"' \
+                                      && ok "en: nieznane polecenie"        || zle "en: nieznane polecenie"
+KOMUNIKATOR_INTERFEJS=en "$K" help | grep -q "^Speaking:" \
+                                      && ok "en: pomoc po angielsku"       || zle "en: pomoc"
+"$K" pomoc | grep -q "^Mówienie:"     && ok "pl: pomoc po polsku"          || zle "pl: pomoc"
+kod 0 version                         && ok "angielska nazwa: version"     || zle "angielska nazwa: version"
+kod 2 set interfejs de                && ok "ustaw interfejs: tylko pl/en" || zle "ustaw interfejs przyjął de"
+( unset KOMUNIKATOR_INTERFEJS; "$K" set interfejs en 2>/dev/null && "$K" settings | grep -q "^interfejs=en$" \
+  && W="$("$K" cośtam 2>&1)"; echo "$W" | grep -q "unknown command" && "$K" ustaw interfejs pl 2>/dev/null ) \
+                                      && ok "ustawienie interfejs zmienia język" || zle "ustawienie interfejs"
 [ "$("$K" lista 2>/dev/null)" = "" ]  && ok "pusta lista"                   || zle "pusta lista"
 kod 2 sluchaj 1 </dev/null            && ok "bez wybranego mikrofonu -> kod 2" || zle "mikrofon wybrany sam z siebie"
 KOMUNIKATOR_ODTWARZACZ="aplay -q" "$K" powiedz test </dev/null >/dev/null 2>&1; [ $? -eq 2 ] \

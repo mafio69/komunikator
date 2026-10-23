@@ -44,6 +44,10 @@ private:
 Audio syntezuj(const std::string& adres, const std::string& tekst, const std::string& glos);
 // jezyk "" = niech serwer zgaduje
 std::string rozpoznaj(const std::string& adres, const Audio& audio, const std::string& jezyk);
+// Nazwy usług dla komunikatów, w bieżącym języku ("usługa mowy" / "speech service").
+std::string usluga_mowy();
+std::string usluga_rozpoznawania();
+
 // "describe" -> dane zdarzenia "info" (co serwer potrafi); usluga jak w Polaczenie
 json::Value opisz(const std::string& adres, const std::string& usluga);
 

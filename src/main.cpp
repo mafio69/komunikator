@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -26,6 +27,7 @@
 
 #include "bledy.hpp"
 #include "gemini.hpp"
+#include "jezyk.hpp"
 #include "json.hpp"
 #include "proces.hpp"
 #include "wav.hpp"
@@ -55,6 +57,7 @@ struct Ustawienia {
     std::string odtwarzacz = "aplay -q";
     std::string mikrofon;  // urządzenie ALSA; puste = jeszcze nie wybrany (program poprosi o wybór)
     std::string glosnik;   // jak wyżej, dla odtwarzania
+    std::string interfejs;  // język komunikatów: "pl", "en" albo puste = jak w systemie
     fs::path dane;                 // katalog z komunikatami
     fs::path plik;                 // skąd wczytano ustawienia
 };
@@ -86,7 +89,7 @@ fs::path katalog_xdg(const char* zmienna, const char* domyslny_w_home) {
     const char* v = std::getenv(zmienna);
     if (v && *v) return fs::path(v);
     const char* home = std::getenv("HOME");
-    if (!home || !*home) throw std::runtime_error("brak zmiennej HOME");
+    if (!home || !*home) throw std::runtime_error(T("brak zmiennej HOME", "the HOME variable is not set"));
     return fs::path(home) / domyslny_w_home;
 }
 
@@ -104,7 +107,9 @@ Ustawienia wczytaj_ustawienia() {
         if (linia.empty() || linia[0] == '#') continue;
         auto rowna = linia.find('=');
         if (rowna == std::string::npos) {
-            std::cerr << "komunikator: " << u.plik.string() << ":" << nr << ": brak '=' - pomijam\n";
+            std::cerr << "komunikator: "
+                      << T("{}:{}: brak '=' - pomijam", "{}:{}: missing '=' - skipping", {u.plik.string(), std::to_string(nr)})
+                      << "\n";
             continue;
         }
         std::string k = przytnij(linia.substr(0, rowna)), v = przytnij(linia.substr(rowna + 1));
@@ -118,7 +123,12 @@ Ustawienia wczytaj_ustawienia() {
         else if (k == "mikrofon") u.mikrofon = v;
         else if (k == "glosnik") u.glosnik = v;
         else if (k == "dane") u.dane = v;
-        else std::cerr << "komunikator: " << u.plik.string() << ":" << nr << ": nieznane ustawienie \"" << k << "\"\n";
+        else if (k == "interfejs") u.interfejs = v;
+        else
+            std::cerr << "komunikator: "
+                      << T("{}:{}: nieznane ustawienie \"{}\"", "{}:{}: unknown setting \"{}\"",
+                           {u.plik.string(), std::to_string(nr), k})
+                      << "\n";
     }
 
     // Zmienne środowiska mają pierwszeństwo przed plikiem - wygodne dla innych programów.
@@ -141,14 +151,18 @@ fs::path katalog_komunikatow(const Ustawienia& u) { return u.dane / "komunikaty"
 
 // Nazwa komunikatu staje się nazwą pliku - nie może wyjść poza katalog ani zawierać dziwnych znaków.
 void sprawdz_nazwe(const std::string& n) {
-    if (n.empty() || n.size() > 64) throw ZleUzycie("nazwa komunikatu musi mieć od 1 do 64 znaków");
-    if (n[0] == '.' || n[0] == '-') throw ZleUzycie("nazwa nie może zaczynać się od '.' ani '-'");
-    if (n.front() == ' ' || n.back() == ' ') throw ZleUzycie("nazwa nie może zaczynać się ani kończyć spacją");
+    if (n.empty() || n.size() > 64)
+        throw ZleUzycie(T("nazwa komunikatu musi mieć od 1 do 64 znaków", "a message name must have 1 to 64 characters"));
+    if (n[0] == '.' || n[0] == '-')
+        throw ZleUzycie(T("nazwa nie może zaczynać się od '.' ani '-'", "a name cannot start with '.' or '-'"));
+    if (n.front() == ' ' || n.back() == ' ')
+        throw ZleUzycie(T("nazwa nie może zaczynać się ani kończyć spacją", "a name cannot start or end with a space"));
     for (unsigned char c : n) {
         bool dozwolony = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
                          c == '_' || c == '.' || c == ' ' || c >= 0x80;  // >= 0x80: litery UTF-8, np. ą, ż
         if (!dozwolony)
-            throw ZleUzycie("niedozwolony znak w nazwie \"" + n + "\" (dozwolone: litery, cyfry, spacja, - _ .)");
+            throw ZleUzycie(T("niedozwolony znak w nazwie \"{}\" (dozwolone: litery, cyfry, spacja, - _ .)",
+                              "invalid character in the name \"{}\" (allowed: letters, digits, space, - _ .)", {n}));
     }
 }
 
@@ -159,9 +173,9 @@ void zapisz_plik(const fs::path& cel, const std::string& tresc) {
     tmp += ".tmp" + std::to_string(getpid());
     {
         std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        if (!f) throw std::runtime_error("nie mogę pisać do " + tmp.string());
+        if (!f) throw std::runtime_error(T("nie mogę pisać do {}", "cannot write to {}", {tmp.string()}));
         f.write(tresc.data(), static_cast<std::streamsize>(tresc.size()));
-        if (!f) throw std::runtime_error("błąd zapisu " + tmp.string());
+        if (!f) throw std::runtime_error(T("błąd zapisu {}", "error while writing {}", {tmp.string()}));
     }
     fs::rename(tmp, cel);
 }
@@ -178,7 +192,7 @@ std::string czytaj_wszystko(std::istream& in) {
 
 std::string czytaj_plik(const fs::path& p) {
     std::ifstream f(p, std::ios::binary);
-    if (!f) throw std::runtime_error("nie mogę otworzyć " + p.string());
+    if (!f) throw std::runtime_error(T("nie mogę otworzyć {}", "cannot open {}", {p.string()}));
     return czytaj_wszystko(f);
 }
 
@@ -214,8 +228,10 @@ int odtworz_plik(const Ustawienia& u, const fs::path& plik) {
 
     pid_t pid;
     if (posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ) != 0) {
-        std::cerr << "komunikator: nie znalazłem odtwarzacza \"" << args[0] << "\"; dźwięk jest w pliku "
-                  << plik.string() << "\n";
+        std::cerr << "komunikator: "
+                  << T("nie znalazłem odtwarzacza \"{}\"; dźwięk jest w pliku {}",
+                       "player \"{}\" not found; the audio is in the file {}", {args[0], plik.string()})
+                  << "\n";
         return BLAD;
     }
     dziecko = pid;
@@ -225,7 +241,9 @@ int odtworz_plik(const Ustawienia& u, const fs::path& plik) {
     dziecko = 0;
     if (przerwano) return PRZERWANO;
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return OK;
-    std::cerr << "komunikator: odtwarzacz \"" << args[0] << "\" zgłosił błąd; dźwięk jest w pliku " << plik.string()
+    std::cerr << "komunikator: "
+              << T("odtwarzacz \"{}\" zgłosił błąd; dźwięk jest w pliku {}",
+                   "player \"{}\" reported an error; the audio is in the file {}", {args[0], plik.string()})
               << "\n";
     return BLAD;
 }
@@ -239,7 +257,7 @@ std::string tekst_z(const std::vector<std::string>& czesci) {
         for (size_t i = 0; i < czesci.size(); ++i) t += (i ? " " : "") + czesci[i];
     }
     t = przytnij(t);
-    if (t.empty()) throw ZleUzycie("brak tekstu do powiedzenia");
+    if (t.empty()) throw ZleUzycie(T("brak tekstu do powiedzenia", "no text to say"));
     return t;
 }
 
@@ -250,7 +268,7 @@ std::vector<std::string> wyjmij_wyjscie(const std::vector<std::string>& args, st
     for (size_t i = 0; i < args.size(); ++i) {
         if (!koniec_opcji && args[i] == "--") { koniec_opcji = true; continue; }
         if (!koniec_opcji && (args[i] == "-o" || args[i] == "--do")) {
-            if (i + 1 >= args.size()) throw ZleUzycie(args[i] + " wymaga nazwy pliku");
+            if (i + 1 >= args.size()) throw ZleUzycie(T("{} wymaga nazwy pliku", "{} needs a file name", {args[i]}));
             wyjscie = args[++i];
             continue;
         }
@@ -264,23 +282,26 @@ struct Urzadzenie {
     std::string opis;
 };
 
-// Rodzaj urządzenia dźwiękowego: mikrofon (nagrywanie) albo głośnik (odtwarzanie).
-struct Rodzaj {
+// TypUrzadzenia urządzenia dźwiękowego: mikrofon (nagrywanie) albo głośnik (odtwarzanie).
+struct TypUrzadzenia {
     const char* klucz;       // klucz w pliku ustawień
     const char* w_proc;      // słowo w /proc/asound/pcm
     const char* w_pipewire;  // media.class węzła PipeWire
     const char* lista;       // polecenie wypisujące listę
-    const char* nazwa;       // dla ludzi
+    const char* nazwa_pl;    // dla ludzi
+    const char* nazwa_en;
 };
-const Rodzaj MIKROFON{"mikrofon", "capture", "Audio/Source", "mikrofony", "mikrofon"};
-const Rodzaj GLOSNIK{"glosnik", "playback", "Audio/Sink", "glosniki", "głośnik"};
+const TypUrzadzenia MIKROFON{"mikrofon", "capture", "Audio/Source", "mikrofony", "mikrofon", "microphone"};
+const TypUrzadzenia GLOSNIK{"glosnik", "playback", "Audio/Sink", "glosniki", "głośnik", "speaker"};
+
+std::string nazwa(const TypUrzadzenia& r) { return T(r.nazwa_pl, r.nazwa_en); }
 
 const std::string PIPEWIRE = "pipewire:NODE=";  // urządzenie PipeWire dla aplay/arecord: pipewire:NODE=<node.name>
 
 
 // Urządzenia z PipeWire - ta sama lista co w ustawieniach dźwięku pulpitu: gniazdo słuchawek, USB, Bluetooth.
 // ok=false, gdy PipeWire nie działa (np. serwer bez pulpitu) - wtedy zostaje lista z jądra.
-std::vector<Urzadzenie> urzadzenia_pipewire(const Rodzaj& r, bool& ok) {
+std::vector<Urzadzenie> urzadzenia_pipewire(const TypUrzadzenia& r, bool& ok) {
     std::vector<Urzadzenie> w;
     std::string zrzut = wyjscie_programu({"pw-dump"}, ok);
     if (!ok) return w;
@@ -304,13 +325,14 @@ std::vector<Urzadzenie> urzadzenia_pipewire(const Rodzaj& r, bool& ok) {
     return w;
 }
 
-std::string& pole(Ustawienia& u, const Rodzaj& r) { return &r == &MIKROFON ? u.mikrofon : u.glosnik; }
-const std::string& pole(const Ustawienia& u, const Rodzaj& r) { return &r == &MIKROFON ? u.mikrofon : u.glosnik; }
+std::string& pole(Ustawienia& u, const TypUrzadzenia& r) { return &r == &MIKROFON ? u.mikrofon : u.glosnik; }
+const std::string& pole(const Ustawienia& u, const TypUrzadzenia& r) { return &r == &MIKROFON ? u.mikrofon : u.glosnik; }
 
 // Lista urządzeń prosto z jądra (/proc/asound) - bez bibliotek. Pierwsza pozycja "default" to urządzenie
 // ustawione w systemie (PipeWire / ustawienia dźwięku pulpitu) - do wyboru, ale nigdy wybierane samo.
-std::vector<Urzadzenie> urzadzenia(const Rodzaj& r) {
-    std::vector<Urzadzenie> w{{"default", std::string("ten, który jest ustawiony w systemie (ustawienia dźwięku)")}};
+std::vector<Urzadzenie> urzadzenia(const TypUrzadzenia& r) {
+    std::vector<Urzadzenie> w{{"default", T("ten, który jest ustawiony w systemie (ustawienia dźwięku)",
+                                            "the one selected in the system (sound settings)")}};
     // Na pulpicie urządzeniami zarządza PipeWire - tylko przez niego działa gniazdo słuchawek i Bluetooth,
     // a bezpośredni dostęp do karty (plughw) omija go i gra nie tam, gdzie trzeba.
     bool jest_pipewire = false;
@@ -340,7 +362,8 @@ std::vector<Urzadzenie> urzadzenia(const Rodzaj& r) {
         std::string nazwa = d == std::string::npos ? "?" : przytnij(l.substr(d + 2, k - d - 2));
         // plughw sam dopasowuje częstotliwość i liczbę kanałów - mniej "nieobsługiwany format"
         w.push_back({"plughw:" + std::to_string(karta) + "," + std::to_string(urz),
-                     nazwa + " (" + (karty.count(karta) ? karty[karta] : "karta " + std::to_string(karta)) + ")"});
+                     nazwa + " (" + (karty.count(karta) ? karty[karta] : T("karta {}", "card {}", {std::to_string(karta)})) +
+                         ")"});
     }
     return w;
 }
@@ -366,25 +389,29 @@ void zapisz_ustawienie(const Ustawienia& u, const std::string& klucz, const std:
 
 // PipeWire przy nieistniejącym urządzeniu NIE zgłasza błędu, tylko gra po cichu na domyślnym.
 // Dlatego przed graniem i nagrywaniem sprawdzamy, czy wybrane urządzenie jest podłączone.
-void sprawdz_podlaczenie(const std::string& urzadzenie, const Rodzaj& r) {
+void sprawdz_podlaczenie(const std::string& urzadzenie, const TypUrzadzenia& r) {
     if (urzadzenie.rfind(PIPEWIRE, 0) != 0) return;
     bool ok = false;
     auto lista = urzadzenia_pipewire(r, ok);
-    if (!ok) throw std::runtime_error("PipeWire nie odpowiada - nie mogę użyć urządzenia: " + std::string(r.nazwa));
+    if (!ok)
+        throw std::runtime_error(T("PipeWire nie odpowiada - nie mogę użyć urządzenia: {}",
+                                   "PipeWire is not responding - cannot use the device: {}", {nazwa(r)}));
     for (const auto& x : lista)
         if (x.nazwa == urzadzenie) return;
-    throw std::runtime_error(std::string("wybrany ") + r.nazwa + " jest niedostępny (odłączony?) - wybierz inny: komunikator " +
-                             r.lista);
+    throw std::runtime_error(T("wybrany {} jest niedostępny (odłączony?) - wybierz inny: komunikator {}",
+                               "the chosen {} is unavailable (unplugged?) - choose another: komunikator {}",
+                               {nazwa(r), r.lista}));
 }
 
-void wypisz_urzadzenia(const Ustawienia& u, const Rodzaj& r, const std::vector<Urzadzenie>& lista, std::ostream& out) {
+void wypisz_urzadzenia(const Ustawienia& u, const TypUrzadzenia& r, const std::vector<Urzadzenie>& lista, std::ostream& out) {
     for (size_t i = 0; i < lista.size(); ++i)
         out << (lista[i].nazwa == pole(u, r) ? "* " : "  ") << i + 1 << "  " << lista[i].nazwa << "  "
             << lista[i].opis << "\n";
     const std::string& wybrany = pole(u, r);
     if (!wybrany.empty() &&
         std::none_of(lista.begin(), lista.end(), [&](const Urzadzenie& x) { return x.nazwa == wybrany; }))
-        out << "* -  " << wybrany << "  (wybrany wcześniej, teraz go nie ma - odłączony?)\n";
+        out << "* -  " << wybrany << "  "
+            << T("(wybrany wcześniej, teraz go nie ma - odłączony?)", "(chosen earlier, now missing - unplugged?)") << "\n";
 }
 
 // "2" -> nazwa z listy; nazwa urządzenia (np. plughw:1,0) przechodzi bez zmian. Pusty wynik = zły numer.
@@ -403,27 +430,30 @@ std::string wybierz_z_listy(const std::string& wybor, const std::vector<Urzadzen
 
 // Urządzenie musi być wybrane świadomie. W terminalu pytamy od razu; program wywołujący dostaje
 // kod 2 i instrukcję - nic nie dzieje się "po cichu" na domyślnym urządzeniu.
-void wymagaj(Ustawienia& u, const Rodzaj& r) {
+void wymagaj(Ustawienia& u, const TypUrzadzenia& r) {
     if (!pole(u, r).empty()) return;
     auto lista = urzadzenia(r);
     if (!isatty(STDIN_FILENO) || !isatty(STDERR_FILENO))
-        throw ZleUzycie(std::string("nie wybrano urządzenia: ") + r.nazwa + ". Wybierz: komunikator " + r.lista +
-                        ", potem komunikator " + r.klucz + " NUMER");
-    std::cerr << "Nie wybrano urządzenia: " << r.nazwa << ". Dostępne:\n";
+        throw ZleUzycie(T("nie wybrano urządzenia: {}. Wybierz: komunikator {}, potem komunikator {} NUMER",
+                          "no {} chosen yet. Choose one: komunikator {}, then komunikator {} NUMBER",
+                          {nazwa(r), r.lista, r.klucz}));
+    std::cerr << T("Nie wybrano urządzenia: {}. Dostępne:", "No {} chosen yet. Available:", {nazwa(r)}) << "\n";
     wypisz_urzadzenia(u, r, lista, std::cerr);
     for (;;) {
-        std::cerr << "Podaj numer: " << std::flush;
+        std::cerr << T("Podaj numer: ", "Enter a number: ") << std::flush;
         std::string l;
-        if (!std::getline(std::cin, l)) throw ZleUzycie(std::string("nie wybrano urządzenia: ") + r.nazwa);
+        if (!std::getline(std::cin, l))
+            throw ZleUzycie(T("nie wybrano urządzenia: {}", "no {} chosen", {nazwa(r)}));
         std::string w = wybierz_z_listy(przytnij(l), lista);
         if (w.empty() || przytnij(l).empty()) {
-            std::cerr << "Nie ma takiego numeru.\n";
+            std::cerr << T("Nie ma takiego numeru.", "There is no such number.") << "\n";
             continue;
         }
         pole(u, r) = w;
         zapisz_ustawienie(u, r.klucz, w);
-        std::cerr << "Zapamiętane: " << r.nazwa << " = " << w << " (zmiana: komunikator " << r.klucz
-                  << " NUMER)\n";
+        std::cerr << T("Zapamiętane: {} = {} (zmiana: komunikator {} NUMER)",
+                       "Saved: {} = {} (to change: komunikator {} NUMBER)", {nazwa(r), w, r.klucz})
+                  << "\n";
         return;
     }
 }
@@ -434,9 +464,13 @@ void wymagaj(Ustawienia& u, const Rodzaj& r) {
 Audio nagraj(const Ustawienia& u, int sekundy, const fs::path& plik, bool poziomy) {
     fs::create_directories(plik.parent_path());
     sprawdz_podlaczenie(u.mikrofon, MIKROFON);
-    std::cerr << "nagrywam " << sekundy << " s z \"" << u.mikrofon << "\"... mów teraz\n";
+    std::cerr << T("nagrywam {} s z \"{}\"... mów teraz", "recording {} s from \"{}\"... speak now",
+                   {std::to_string(sekundy), u.mikrofon})
+              << "\n";
     int rura[2];
-    if (pipe2(rura, O_CLOEXEC) != 0) throw std::runtime_error("nie mogę utworzyć potoku");
+    if (pipe2(rura, O_CLOEXEC) != 0)
+        throw Blad(::Rodzaj::System, T("Nie mogę rozpocząć nagrywania. Spróbuj jeszcze raz.", "Cannot start recording. Please try again."),
+                   std::string("pipe2: ") + std::strerror(errno));
     posix_spawn_file_actions_t akcje;
     posix_spawn_file_actions_init(&akcje);
     posix_spawn_file_actions_adddup2(&akcje, rura[1], STDOUT_FILENO);
@@ -451,7 +485,7 @@ Audio nagraj(const Ustawienia& u, int sekundy, const fs::path& plik, bool poziom
     close(rura[1]);
     if (r != 0) {
         close(rura[0]);
-        throw std::runtime_error("brak programu arecord (pakiet alsa-utils)");
+        throw std::runtime_error(T("brak programu arecord (pakiet alsa-utils)", "the arecord program is missing (package alsa-utils)"));
     }
     dziecko = pid;
 
@@ -489,8 +523,9 @@ Audio nagraj(const Ustawienia& u, int sekundy, const fs::path& plik, bool poziom
     }
     dziecko = 0;
     if (!przerwano && !(WIFEXITED(status) && WEXITSTATUS(status) == 0))
-        throw std::runtime_error("nagrywanie z \"" + u.mikrofon +
-                                 "\" nie powiodło się - sprawdź: komunikator mikrofony (zajęty lub odłączony?)");
+        throw std::runtime_error(T("nagrywanie z \"{}\" nie powiodło się - sprawdź: komunikator mikrofony (zajęty lub odłączony?)",
+                                   "recording from \"{}\" failed - check: komunikator mikrofony (busy or unplugged?)",
+                                   {u.mikrofon}));
     a.pcm.resize(a.pcm.size() - a.pcm.size() % 2);
     zapisz_plik(plik, wav_bajty(a));
 
@@ -502,7 +537,10 @@ Audio nagraj(const Ustawienia& u, int sekundy, const fs::path& plik, bool poziom
         szczyt = std::max(szczyt, v < 0 ? -v : v);
     }
     if (szczyt < 200) {
-        std::cerr << "uwaga: nagranie to prawie cisza - mikrofon wyciszony albo wybrany zły (komunikator mikrofony)\n";
+        std::cerr << T("uwaga: nagranie to prawie cisza - mikrofon wyciszony albo wybrany zły (komunikator mikrofony)",
+                       "warning: the recording is almost silent - the microphone is muted or the wrong one is chosen "
+                       "(komunikator mikrofony)")
+                  << "\n";
         if (poziomy) std::cout << "cisza" << std::endl;
     }
     return a;
@@ -516,11 +554,14 @@ int sekundy_z(const std::vector<std::string>& args, int domyslne) {
         if (poz == args[0].size() && s >= 1 && s <= 600) return s;
     } catch (const std::exception&) {
     }
-    throw ZleUzycie("czas nagrania to liczba sekund od 1 do 600, a nie \"" + args[0] + "\"");
+    throw ZleUzycie(T("czas nagrania to liczba sekund od 1 do 600, a nie \"{}\"",
+                      "the recording time is a number of seconds from 1 to 600, not \"{}\"", {args[0]}));
 }
 
+// Pełne teksty pomocy w obu językach (nie zdanie po zdaniu - układ i wyrównanie są różne).
 void pomoc() {
-    std::cout << R"(komunikator )" << WERSJA << R"( - mowa z linii poleceń
+    if (jezyk_interfejsu() == Jezyk::Polski) {
+        std::cout << "komunikator " << WERSJA << R"( - mowa z linii poleceń
 
 Mówienie:
   komunikator powiedz TEKST...          powiedz od razu (głośnik tego komputera)
@@ -547,18 +588,67 @@ Rozpoznawanie mowy:
   komunikator rozpoznaj PLIK.wav        wypisz, co powiedziano w nagraniu
   arecord -f S16_LE -r 16000 -c 1 -d 5 | komunikator rozpoznaj -
 
-Diagnostyka:
+Diagnostyka i ustawienia:
   komunikator sprawdz                   czy usługi mowy odpowiadają
   komunikator glosy                     głosy dostępne w usłudze mowy
   komunikator ustawienia                bieżące ustawienia i skąd pochodzą
   komunikator ustaw KLUCZ WARTOŚĆ       zmień ustawienie, np. ustaw tts 192.168.1.10:10200
   komunikator ustaw rozpoznawanie gemini   rozpoznawanie przez Gemini (chmura), zapas: whisper
+  komunikator ustaw interfejs en        komunikaty po angielsku (pl = po polsku)
   komunikator klucz gemini              zapisz klucz Gemini (wklej, Enter; nie jest wyświetlany)
   komunikator wersja
+
+Każde polecenie ma też angielską nazwę: say, save, play, list, delete, listen, record,
+transcribe, check, voices, settings, set, key, microphones, microphone, speakers, speaker.
 
 Kody wyjścia: 0 = dobrze, 1 = błąd wykonania, 2 = złe polecenie, 130 = zatrzymane.
 Szczegóły: INSTRUKCJA.md
 )";
+    } else {
+        std::cout << "komunikator " << WERSJA << R"( - speech from the command line
+
+Speaking:
+  komunikator say TEXT...               say it now (this computer's speaker)
+  komunikator say -o FILE.wav TEXT      save the speech to a file instead of speaking
+  echo "text" | komunikator say -       text from standard input
+
+Saved messages (they work without the speech service - the audio is stored):
+  komunikator save NAME TEXT...         record a message under a name
+  komunikator play NAME                 play a saved message
+  komunikator play NAME -o FILE.wav     copy its audio to a file
+  komunikator list                      all messages (NAME<tab>TEXT)
+  komunikator delete NAME               delete a message
+
+Microphone and speaker (on first use the program asks you to choose):
+  komunikator microphones               list microphones (* = chosen)
+  komunikator microphone NUMBER         choose a microphone from the list (remembered)
+  komunikator speakers                  list speakers (* = chosen)
+  komunikator speaker NUMBER            choose a speaker from the list (remembered)
+  komunikator listen [SECONDS]          record and print the recognized text (default 5 s)
+  komunikator record [SECONDS] [-o FILE.wav]  only record (Ctrl+C stops early and keeps it)
+             --poziomy                  print the input level live ("poziom 0.42" every 0.1 s)
+
+Speech recognition:
+  komunikator transcribe FILE.wav       print what was said in a recording
+  arecord -f S16_LE -r 16000 -c 1 -d 5 | komunikator transcribe -
+
+Diagnostics and settings:
+  komunikator check                     are the speech services responding
+  komunikator voices                    voices available in the speech service
+  komunikator settings                  current settings and where they come from
+  komunikator set KEY VALUE             change a setting, e.g. set tts 192.168.1.10:10200
+  komunikator set rozpoznawanie gemini  recognize through Gemini (cloud), fallback: whisper
+  komunikator set interfejs pl          messages in Polish (en = English)
+  komunikator key gemini                store a Gemini key (paste, Enter; it is not shown)
+  komunikator version
+
+Every command also has its Polish name: powiedz, zapisz, odtworz, lista, usun, sluchaj,
+nagraj, rozpoznaj, sprawdz, glosy, ustawienia, ustaw, klucz, mikrofony, mikrofon, glosniki, glosnik.
+
+Exit codes: 0 = success, 1 = runtime error, 2 = wrong command, 130 = stopped.
+Details: INSTRUCTIONS.md
+)";
+    }
 }
 
 int cmd_powiedz(const Ustawienia& u, const std::vector<std::string>& args) {
@@ -568,7 +658,7 @@ int cmd_powiedz(const Ustawienia& u, const std::vector<std::string>& args) {
     Audio a = wyoming::syntezuj(u.tts, tekst, u.glos);
     if (!wyjscie.empty()) {
         zapisz_plik(fs::absolute(wyjscie), wav_bajty(a));
-        std::cerr << "zapisano " << wyjscie << " (" << sekundy(a) << ")\n";
+        std::cerr << T("zapisano {} ({})", "saved {} ({})", {wyjscie, sekundy(a)}) << "\n";
         return OK;
     }
     fs::path ostatni = u.dane / "ostatni.wav";
@@ -577,7 +667,7 @@ int cmd_powiedz(const Ustawienia& u, const std::vector<std::string>& args) {
 }
 
 int cmd_zapisz(const Ustawienia& u, const std::vector<std::string>& args) {
-    if (args.size() < 2) throw ZleUzycie("użycie: komunikator zapisz NAZWA TEKST...");
+    if (args.size() < 2) throw ZleUzycie(T("użycie: komunikator zapisz NAZWA TEKST...", "usage: komunikator save NAME TEXT..."));
     const std::string& nazwa = args[0];
     sprawdz_nazwe(nazwa);
     std::string tekst = tekst_z(std::vector<std::string>(args.begin() + 1, args.end()));
@@ -586,19 +676,25 @@ int cmd_zapisz(const Ustawienia& u, const std::vector<std::string>& args) {
     bool byl = fs::exists(kat / (nazwa + ".txt"));
     zapisz_plik(kat / (nazwa + ".wav"), wav_bajty(a));
     zapisz_plik(kat / (nazwa + ".txt"), tekst + "\n");
-    std::cerr << (byl ? "nadpisano " : "zapisano ") << nazwa << " (" << sekundy(a) << ")\n";
+    std::cerr << (byl ? T("nadpisano {} ({})", "replaced {} ({})", {nazwa, sekundy(a)})
+                      : T("zapisano {} ({})", "saved {} ({})", {nazwa, sekundy(a)}))
+              << "\n";
     return OK;
 }
 
 int cmd_odtworz(const Ustawienia& u, const std::vector<std::string>& args) {
     std::string wyjscie;
     auto reszta = wyjmij_wyjscie(args, wyjscie);
-    if (reszta.size() != 1) throw ZleUzycie("użycie: komunikator odtworz NAZWA [-o PLIK.wav]");
+    if (reszta.size() != 1)
+        throw ZleUzycie(T("użycie: komunikator odtworz NAZWA [-o PLIK.wav]", "usage: komunikator play NAME [-o FILE.wav]"));
     sprawdz_nazwe(reszta[0]);
     fs::path kat = katalog_komunikatow(u);
     fs::path wav = kat / (reszta[0] + ".wav"), txt = kat / (reszta[0] + ".txt");
     if (!fs::exists(txt)) {
-        std::cerr << "komunikator: nie ma komunikatu \"" << reszta[0] << "\" (zobacz: komunikator lista)\n";
+        std::cerr << "komunikator: "
+                  << T("nie ma komunikatu \"{}\" (zobacz: komunikator lista)", "there is no message \"{}\" (see: komunikator list)",
+                       {reszta[0]})
+                  << "\n";
         return BLAD;
     }
     if (wyjscie.empty() && uzywa_aplay(u)) sprawdz_podlaczenie(u.glosnik, GLOSNIK);
@@ -625,21 +721,21 @@ int cmd_lista(const Ustawienia& u) {
         std::replace(t.begin(), t.end(), '\n', ' ');
         std::cout << n << "\t" << t << "\n";
     }
-    if (nazwy.empty()) std::cerr << "(brak zapisanych komunikatów)\n";
+    if (nazwy.empty()) std::cerr << T("(brak zapisanych komunikatów)", "(no saved messages)") << "\n";
     return OK;
 }
 
 int cmd_usun(const Ustawienia& u, const std::vector<std::string>& args) {
-    if (args.size() != 1) throw ZleUzycie("użycie: komunikator usun NAZWA");
+    if (args.size() != 1) throw ZleUzycie(T("użycie: komunikator usun NAZWA", "usage: komunikator delete NAME"));
     sprawdz_nazwe(args[0]);
     fs::path kat = katalog_komunikatow(u);
     bool byl = fs::remove(kat / (args[0] + ".txt"));
     byl = fs::remove(kat / (args[0] + ".wav")) || byl;
     if (!byl) {
-        std::cerr << "komunikator: nie ma komunikatu \"" << args[0] << "\"\n";
+        std::cerr << "komunikator: " << T("nie ma komunikatu \"{}\"", "there is no message \"{}\"", {args[0]}) << "\n";
         return BLAD;
     }
-    std::cerr << "usunięto " << args[0] << "\n";
+    std::cerr << T("usunięto {}", "deleted {}", {args[0]}) << "\n";
     return OK;
 }
 
@@ -665,10 +761,14 @@ std::string rozpoznaj_mowe(const Ustawienia& u, const Audio& a) {
             return gemini::rozpoznaj(a, klucz_gemini(u), u.gemini_model, u.jezyk, tmp);
         } catch (const Blad& e) {
             zapisz_w_dzienniku("Gemini: " + std::string(e.what()) + " | " + e.szczegoly());
-            std::cerr << "uwaga: Gemini niedostępne - rozpoznaję lokalnie (whisper)\n";
+            std::cerr << T("uwaga: Gemini niedostępne - rozpoznaję lokalnie (whisper)",
+                           "warning: Gemini unavailable - recognizing locally (whisper)")
+                      << "\n";
         } catch (const std::exception& e) {
             zapisz_w_dzienniku(std::string("Gemini: ") + e.what());
-            std::cerr << "uwaga: Gemini niedostępne - rozpoznaję lokalnie (whisper)\n";
+            std::cerr << T("uwaga: Gemini niedostępne - rozpoznaję lokalnie (whisper)",
+                           "warning: Gemini unavailable - recognizing locally (whisper)")
+                      << "\n";
         }
     }
     return wyoming::rozpoznaj(u.stt, a, u.jezyk);
@@ -676,19 +776,21 @@ std::string rozpoznaj_mowe(const Ustawienia& u, const Audio& a) {
 
 int cmd_klucz(const Ustawienia& u, const std::vector<std::string>& args) {
     if (args.size() != 1 || (args[0] != "gemini" && args[0] != "--usun"))
-        throw ZleUzycie("użycie: komunikator klucz gemini  (klucz podaj na wejściu, np. wklej i Enter)  |  klucz --usun");
+        throw ZleUzycie(T("użycie: komunikator klucz gemini  (klucz podaj na wejściu, np. wklej i Enter)  |  klucz --usun",
+                          "usage: komunikator key gemini  (give the key on standard input, e.g. paste and Enter)  |  key --usun"));
     if (args[0] == "--usun") {
         fs::remove(plik_klucza(u));
-        std::cerr << "klucz Gemini usunięty\n";
+        std::cerr << T("klucz Gemini usunięty", "Gemini key deleted") << "\n";
         return OK;
     }
     // Klucz ze standardowego wejścia, nie z argumentów: nie zostaje w historii poleceń ani na liście procesów.
-    if (isatty(STDIN_FILENO)) std::cerr << "Wklej klucz Gemini i naciśnij Enter: ";
+    if (isatty(STDIN_FILENO)) std::cerr << T("Wklej klucz Gemini i naciśnij Enter: ", "Paste the Gemini key and press Enter: ");
     std::string k;
     std::getline(std::cin, k);
     k = przytnij(k);
     if (k.size() < 20 || k.find_first_of(" \t\"'") != std::string::npos)
-        throw ZleUzycie("to nie wygląda na klucz Gemini (aistudio.google.com -> Get API key)");
+        throw ZleUzycie(T("to nie wygląda na klucz Gemini (aistudio.google.com -> Get API key)",
+                          "this does not look like a Gemini key (aistudio.google.com -> Get API key)"));
     fs::create_directories(plik_klucza(u).parent_path());
     mode_t stara = umask(077);
     try {
@@ -699,42 +801,46 @@ int cmd_klucz(const Ustawienia& u, const std::vector<std::string>& args) {
     }
     umask(stara);
     fs::permissions(plik_klucza(u), fs::perms::owner_read | fs::perms::owner_write);
-    std::cerr << "klucz Gemini zapisany (" << plik_klucza(u).string() << ", tylko dla Ciebie)\n";
+    std::cerr << T("klucz Gemini zapisany ({}, tylko dla Ciebie)", "Gemini key saved ({}, readable only by you)",
+                   {plik_klucza(u).string()})
+              << "\n";
     return OK;
 }
 
 int cmd_rozpoznaj(const Ustawienia& u, const std::vector<std::string>& args) {
-    if (args.size() != 1) throw ZleUzycie("użycie: komunikator rozpoznaj PLIK.wav  (albo - dla wejścia)");
+    if (args.size() != 1)
+        throw ZleUzycie(T("użycie: komunikator rozpoznaj PLIK.wav  (albo - dla wejścia)",
+                          "usage: komunikator transcribe FILE.wav  (or - for standard input)"));
     std::string bajty = args[0] == "-" ? czytaj_wszystko(std::cin) : czytaj_plik(args[0]);
     Audio a = wav_z_bajtow(bajty);
-    if (a.pcm.empty()) throw std::runtime_error("nagranie jest puste");
+    if (a.pcm.empty()) throw std::runtime_error(T("nagranie jest puste", "the recording is empty"));
     std::cout << przytnij(rozpoznaj_mowe(u, a)) << "\n";
     return OK;
 }
 
 int cmd_sprawdz(const Ustawienia& u) {
     int wynik = OK;
-    auto sprawdz = [&](const char* co, const std::string& adres, const char* klucz, const char* usluga) {
+    auto sprawdz = [&](const std::string& co, const std::string& adres, const char* klucz, const std::string& usluga) {
         try {
             json::Value info = wyoming::opisz(adres, usluga);
             std::string programy;
             for (auto& p : info[klucz].tab)
                 programy += (programy.empty() ? "" : ", ") + p["name"].tekst("?") + " " + p["version"].tekst();
-            std::cout << "OK    " << co << " " << adres << "  " << (programy.empty() ? "(bez opisu)" : programy)
+            std::cout << "OK    " << co << " " << adres << "  " << (programy.empty() ? T("(bez opisu)", "(no description)") : programy)
                       << "\n";
         } catch (const Blad& e) {
             zapisz_w_dzienniku(e.szczegoly());
-            std::cout << "BŁĄD  " << co << " " << adres << "  " << e.what() << "\n";
+            std::cout << T("BŁĄD", "FAIL") << "  " << co << " " << adres << "  " << e.what() << "\n";
             wynik = BLAD;
         }
     };
-    sprawdz("mowa (tts)         ", u.tts, "tts", "usługa mowy");
-    sprawdz("rozpoznawanie (stt)", u.stt, "asr", "usługa rozpoznawania mowy");
+    sprawdz(T("mowa (tts)         ", "speech (tts)       "), u.tts, "tts", wyoming::usluga_mowy());
+    sprawdz(T("rozpoznawanie (stt)", "recognition (stt)  "), u.stt, "asr", wyoming::usluga_rozpoznawania());
     return wynik;
 }
 
 int cmd_glosy(const Ustawienia& u) {
-    json::Value info = wyoming::opisz(u.tts, "usługa mowy");
+    json::Value info = wyoming::opisz(u.tts, wyoming::usluga_mowy());
     for (auto& program : info["tts"].tab)
         for (auto& g : program["voices"].tab) {
             bool zainstalowany = g["installed"].typ != json::Value::Typ::Bool || g["installed"].b;
@@ -743,28 +849,33 @@ int cmd_glosy(const Ustawienia& u) {
     return OK;
 }
 
-int cmd_urzadzenia(const Ustawienia& u, const Rodzaj& r) {
+int cmd_urzadzenia(const Ustawienia& u, const TypUrzadzenia& r) {
     wypisz_urzadzenia(u, r, urzadzenia(r), std::cout);
     if (pole(u, r).empty())
-        std::cerr << "(nic nie wybrano - wybierz: komunikator " << r.klucz << " NUMER)\n";
+        std::cerr << T("(nic nie wybrano - wybierz: komunikator {} NUMER)", "(nothing chosen - choose: komunikator {} NUMBER)",
+                       {r.klucz})
+                  << "\n";
     return OK;
 }
 
-int cmd_wybierz(const Ustawienia& u, const Rodzaj& r, const std::vector<std::string>& args) {
+int cmd_wybierz(const Ustawienia& u, const TypUrzadzenia& r, const std::vector<std::string>& args) {
     if (args.empty()) {
         if (pole(u, r).empty()) {
-            std::cerr << "nic nie wybrano - lista: komunikator " << r.lista << "\n";
+            std::cerr << T("nic nie wybrano - lista: komunikator {}", "nothing chosen - list: komunikator {}", {r.lista}) << "\n";
             return BLAD;
         }
         std::cout << pole(u, r) << "\n";
         return OK;
     }
     if (args.size() != 1)
-        throw ZleUzycie(std::string("użycie: komunikator ") + r.klucz + " NUMER  (numer z: komunikator " + r.lista + ")");
+        throw ZleUzycie(T("użycie: komunikator {} NUMER  (numer z: komunikator {})",
+                          "usage: komunikator {} NUMBER  (number from: komunikator {})", {r.klucz, r.lista}));
     std::string w = wybierz_z_listy(args[0], urzadzenia(r));
-    if (w.empty()) throw ZleUzycie("nie ma numeru " + args[0] + " na liście (komunikator " + r.lista + ")");
+    if (w.empty())
+        throw ZleUzycie(T("nie ma numeru {} na liście (komunikator {})", "there is no number {} on the list (komunikator {})",
+                          {args[0], r.lista}));
     zapisz_ustawienie(u, r.klucz, w);
-    std::cerr << "wybrany " << r.nazwa << ": " << w << " (zapisane w " << u.plik.string() << ")\n";
+    std::cerr << T("wybrany {}: {} (zapisane w {})", "chosen {}: {} (saved in {})", {nazwa(r), w, u.plik.string()}) << "\n";
     return OK;
 }
 
@@ -775,7 +886,9 @@ int cmd_nagraj(const Ustawienia& u, const std::vector<std::string>& args) {
     reszta.erase(std::remove_if(reszta.begin(), reszta.end(),
                                 [&](const std::string& x) { return x == "--poziomy" && (poziomy = true); }),
                  reszta.end());
-    if (reszta.size() > 1) throw ZleUzycie("użycie: komunikator nagraj [SEKUNDY] [--poziomy] [-o PLIK.wav]");
+    if (reszta.size() > 1)
+        throw ZleUzycie(T("użycie: komunikator nagraj [SEKUNDY] [--poziomy] [-o PLIK.wav]",
+                          "usage: komunikator record [SECONDS] [--poziomy] [-o FILE.wav]"));
     fs::path plik = wyjscie.empty() ? u.dane / "nagranie.wav" : fs::absolute(wyjscie);
     nagraj(u, sekundy_z(reszta, 5), plik, poziomy);
     std::cout << plik.string() << "\n";
@@ -783,47 +896,78 @@ int cmd_nagraj(const Ustawienia& u, const std::vector<std::string>& args) {
 }
 
 int cmd_sluchaj(const Ustawienia& u, const std::vector<std::string>& args) {
-    if (args.size() > 1) throw ZleUzycie("użycie: komunikator sluchaj [SEKUNDY]");
+    if (args.size() > 1) throw ZleUzycie(T("użycie: komunikator sluchaj [SEKUNDY]", "usage: komunikator listen [SECONDS]"));
     Audio a = nagraj(u, sekundy_z(args, 5), u.dane / "nagranie.wav", false);
-    if (a.pcm.empty()) throw std::runtime_error("nic się nie nagrało");
+    if (a.pcm.empty()) throw std::runtime_error(T("nic się nie nagrało", "nothing was recorded"));
     std::cout << przytnij(rozpoznaj_mowe(u, a)) << "\n";
     return OK;
 }
 
 int cmd_ustaw(const Ustawienia& u, const std::vector<std::string>& args) {
     static const std::set<std::string> klucze = {"tts", "stt", "glos", "jezyk", "odtwarzacz", "mikrofon", "glosnik", "dane",
-                                                  "rozpoznawanie", "gemini_model"};
+                                                  "rozpoznawanie", "gemini_model", "interfejs"};
     if (args.size() != 2 || !klucze.count(args[0]))
-        throw ZleUzycie("użycie: komunikator ustaw KLUCZ WARTOŚĆ  (klucze: tts stt glos jezyk odtwarzacz mikrofon glosnik dane)");
+        throw ZleUzycie(T("użycie: komunikator ustaw KLUCZ WARTOŚĆ  (klucze: tts stt glos jezyk odtwarzacz mikrofon glosnik dane "
+                          "rozpoznawanie gemini_model interfejs)",
+                          "usage: komunikator set KEY VALUE  (keys: tts stt glos jezyk odtwarzacz mikrofon glosnik dane "
+                          "rozpoznawanie gemini_model interfejs)"));
     const std::string& v = args[1];
-    if (v.find('\n') != std::string::npos) throw ZleUzycie("wartość nie może mieć wielu linii");
+    if (v.find('\n') != std::string::npos) throw ZleUzycie(T("wartość nie może mieć wielu linii", "a value cannot span several lines"));
     if (args[0] == "rozpoznawanie" && v != "whisper" && v != "gemini")
-        throw ZleUzycie("rozpoznawanie: whisper (lokalnie) albo gemini (chmura)");
+        throw ZleUzycie(T("rozpoznawanie: whisper (lokalnie) albo gemini (chmura)", "rozpoznawanie: whisper (local) or gemini (cloud)"));
+    if (args[0] == "interfejs" && v != "pl" && v != "en")
+        throw ZleUzycie(T("interfejs: pl (po polsku) albo en (po angielsku)", "interfejs: pl (Polish) or en (English)"));
     if ((args[0] == "tts" || args[0] == "stt") && v.rfind(':') == std::string::npos)
-        throw ZleUzycie("adres podaj jako host:port, np. 192.168.1.10:10200");
+        throw ZleUzycie(T("adres podaj jako host:port, np. 192.168.1.10:10200", "give the address as host:port, e.g. 192.168.1.10:10200"));
     zapisz_ustawienie(u, args[0], v);
-    std::cerr << "zapisano " << args[0] << "=" << v << "\n";
+    if (Jezyk j; args[0] == "interfejs" && jezyk_z_nazwy(v, j)) ustaw_jezyk_interfejsu(j);  // potwierdzenie już w nowym języku
+    std::cerr << T("zapisano {}={}", "saved {}={}", {args[0], v}) << "\n";
     return OK;
 }
 
 int cmd_ustawienia(const Ustawienia& u) {
-    std::cout << "plik ustawień: " << u.plik.string() << (fs::exists(u.plik) ? "" : "  (nie istnieje - domyślne)")
-              << "\n"
+    std::cout << T("plik ustawień: {}", "settings file: {}", {u.plik.string()})
+              << (fs::exists(u.plik) ? "" : T("  (nie istnieje - domyślne)", "  (does not exist - defaults)")) << "\n"
               << "tts=" << u.tts << "\nstt=" << u.stt << "\nglos=" << u.glos << "\njezyk=" << u.jezyk << "\nrozpoznawanie=" << u.rozpoznawanie
               << "\ngemini_model=" << u.gemini_model << "\ngemini_klucz=" << (klucz_gemini(u).empty() ? "brak" : "zapisany")
-              << "\nodtwarzacz=" << u.odtwarzacz << "\nmikrofon=" << u.mikrofon << "\nglosnik=" << u.glosnik << "\ndane=" << u.dane.string() << "\n";
+              << "\nodtwarzacz=" << u.odtwarzacz << "\nmikrofon=" << u.mikrofon << "\nglosnik=" << u.glosnik << "\ndane=" << u.dane.string()
+              << "\ninterfejs=" << (jezyk_interfejsu() == Jezyk::Polski ? "pl" : "en") << "\n";
     return OK;
+}
+
+// Angielskie nazwy poleceń -> polskie. Obie działają zawsze, niezależnie od języka komunikatów.
+std::string polska_nazwa(const std::string& polecenie) {
+    static const std::map<std::string, std::string> angielskie = {
+        {"say", "powiedz"},        {"save", "zapisz"},          {"play", "odtworz"},     {"list", "lista"},
+        {"delete", "usun"},        {"transcribe", "rozpoznaj"}, {"check", "sprawdz"},    {"voices", "glosy"},
+        {"settings", "ustawienia"}, {"set", "ustaw"},           {"key", "klucz"},        {"microphones", "mikrofony"},
+        {"microphone", "mikrofon"}, {"speakers", "glosniki"},   {"speaker", "glosnik"},  {"record", "nagraj"},
+        {"listen", "sluchaj"},     {"help", "pomoc"},           {"version", "wersja"}};
+    auto it = angielskie.find(polecenie);
+    return it == angielskie.end() ? polecenie : it->second;
+}
+
+// Język z pliku ustawień, chyba że wskazano go jawnie zmienną KOMUNIKATOR_INTERFEJS.
+void ustal_jezyk(const Ustawienia& u) {
+    Jezyk j;
+    const char* zmienna = std::getenv("KOMUNIKATOR_INTERFEJS");
+    if ((!zmienna || !*zmienna) && jezyk_z_nazwy(u.interfejs, j)) ustaw_jezyk_interfejsu(j);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    if (args.empty() || args[0] == "pomoc" || args[0] == "-h" || args[0] == "--help") {
+    std::string polecenie = args.empty() ? "" : polska_nazwa(args[0]);
+    if (args.empty() || polecenie == "pomoc" || polecenie == "-h" || polecenie == "--help") {
+        try {
+            ustal_jezyk(wczytaj_ustawienia());
+        } catch (const std::exception&) {
+            // pomoc ma się pokazać zawsze - w najgorszym razie w języku z systemu
+        }
         pomoc();
         return args.empty() ? ZLE_UZYCIE : OK;
     }
-    std::string polecenie = args[0];
     args.erase(args.begin());
     struct sigaction sa {};
     sa.sa_handler = na_przerwanie;
@@ -836,6 +980,7 @@ int main(int argc, char** argv) {
             return OK;
         }
         Ustawienia u = wczytaj_ustawienia();
+        ustal_jezyk(u);
         if (polecenie == "nagraj" || polecenie == "sluchaj") wymagaj(u, MIKROFON);
         // głośnik potrzebny tylko, gdy naprawdę gramy (bez -o) i przez aplay
         bool do_pliku = std::find(args.begin(), args.end(), "-o") != args.end() ||
@@ -858,7 +1003,7 @@ int main(int argc, char** argv) {
         if (polecenie == "glosnik") return cmd_wybierz(u, GLOSNIK, args);
         if (polecenie == "nagraj") return cmd_nagraj(u, args);
         if (polecenie == "sluchaj") return cmd_sluchaj(u, args);
-        throw ZleUzycie("nieznane polecenie \"" + polecenie + "\" (komunikator pomoc)");
+        throw ZleUzycie(T("nieznane polecenie \"{}\" (komunikator pomoc)", "unknown command \"{}\" (komunikator help)", {polecenie}));
     } catch (const ZleUzycie& e) {
         std::cerr << "komunikator: " << e.what() << "\n";
         return ZLE_UZYCIE;
@@ -881,7 +1026,8 @@ int main(int argc, char** argv) {
                           tekst.find("filesystem error") != std::string::npos;
         if (techniczny) {
             std::string dz = sciezka_dziennika();
-            std::cerr << "komunikator: Coś poszło nie tak." << (dz.empty() ? "" : " Szczegóły zapisałem w dzienniku: " + dz)
+            std::cerr << "komunikator: " << T("Coś poszło nie tak.", "Something went wrong.")
+                      << (dz.empty() ? "" : T(" Szczegóły zapisałem w dzienniku: {}", " The details are in the log: {}", {dz}))
                       << "\n";
         } else {
             std::cerr << "komunikator: " << tekst << "\n";

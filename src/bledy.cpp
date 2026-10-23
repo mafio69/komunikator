@@ -1,5 +1,7 @@
 #include "bledy.hpp"
 
+#include "jezyk.hpp"
+
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
@@ -15,7 +17,7 @@ Blad::Blad(Rodzaj rodzaj, const std::string& komunikat, std::string szczegoly)
 namespace {
 
 std::string z_wielkiej(std::string s) {
-    // Pierwsze litery naszych nazw usług są ASCII ("usługa..."), więc wystarczy zwykłe toupper.
+    // Pierwsze litery nazw usług są ASCII ("usługa...", "speech..."), więc wystarczy zwykła zamiana.
     if (!s.empty() && s[0] >= 'a' && s[0] <= 'z') s[0] = static_cast<char>(s[0] - 'a' + 'A');
     return s;
 }
@@ -29,21 +31,32 @@ fs::path katalog_stanu() {
 }  // namespace
 
 std::string komunikat_uslugi(Rodzaj rodzaj, const std::string& usluga, const std::string& adres) {
+    const std::string Usluga = z_wielkiej(usluga);
     switch (rodzaj) {
         case Rodzaj::UslugaNiedostepna:
-            return "Nie mogę połączyć się z: " + usluga + " (" + adres +
-                   "). Sprawdź, czy serwer jest włączony i czy adres jest dobry: komunikator ustawienia.";
+            return T("Nie mogę połączyć się z: {} ({}). Sprawdź, czy serwer jest włączony i czy adres jest dobry: "
+                     "komunikator ustawienia.",
+                     "I can't reach the {} ({}). Check that the server is running and the address is right: "
+                     "komunikator settings.",
+                     {usluga, adres});
         case Rodzaj::UslugaNieOdpowiada:
-            return z_wielkiej(usluga) + " (" + adres +
-                   ") nie odpowiada. Spróbuj za chwilę; jeśli to się powtarza, sprawdź serwer.";
+            return T("{} ({}) nie odpowiada. Spróbuj za chwilę; jeśli to się powtarza, sprawdź serwer.",
+                     "The {} ({}) is not responding. Try again in a moment; if it keeps happening, check the server.",
+                     {jezyk_interfejsu() == Jezyk::Polski ? Usluga : usluga, adres});
         case Rodzaj::UslugaPrzerwala:
-            return z_wielkiej(usluga) + " przerwała rozmowę albo odpowiedziała niezrozumiale. Spróbuj jeszcze raz.";
+            return T("{} przerwała rozmowę albo odpowiedziała niezrozumiale. Spróbuj jeszcze raz.",
+                     "The {} broke off the conversation or answered with something unreadable. Please try again.",
+                     {jezyk_interfejsu() == Jezyk::Polski ? Usluga : usluga});
         case Rodzaj::UslugaOdmowila:
-            return z_wielkiej(usluga) + " nie mogła wykonać zadania. Spróbuj jeszcze raz albo krótszym tekstem.";
+            return T("{} nie mogła wykonać zadania. Spróbuj jeszcze raz albo krótszym tekstem.",
+                     "The {} could not do the job. Please try again, perhaps with a shorter text.",
+                     {jezyk_interfejsu() == Jezyk::Polski ? Usluga : usluga});
         case Rodzaj::ZlyAdres:
-            return "Adres \"" + adres + "\" jest niepoprawny. Podaj go jako host:port, np. 192.168.1.10:10200.";
+            return T("Adres \"{}\" jest niepoprawny. Podaj go jako host:port, np. 192.168.1.10:10200.",
+                     "The address \"{}\" is not valid. Give it as host:port, e.g. 192.168.1.10:10200.", {adres});
         default:
-            return "Coś poszło nie tak z: " + usluga + ". Spróbuj jeszcze raz.";
+            return T("Coś poszło nie tak z: {}. Spróbuj jeszcze raz.", "Something went wrong with the {}. Please try again.",
+                     {usluga});
     }
 }
 
